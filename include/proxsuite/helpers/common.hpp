@@ -10,6 +10,7 @@
 
 #include "proxsuite/config.hpp"
 #include <limits>
+#include <type_traits>
 
 namespace proxsuite {
 namespace helpers {
