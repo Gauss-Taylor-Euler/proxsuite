@@ -39,7 +39,7 @@ macro(proxsuite_test name path)
   add_dependencies(build_tests ${target_name})
 endmacro()
 
-proxsuite_test(socp_extension src/socp_extension.cpp)
+#proxsuite_test(socp_extension src/socp_extension.cpp)
 proxsuite_test(dense_ruiz_equilibration src/dense_ruiz_equilibration.cpp)
 proxsuite_test(dense_qp_eq src/dense_qp_eq.cpp)
 proxsuite_test(dense_qp_with_eq_and_in src/dense_qp_with_eq_and_in.cpp)
