@@ -44,3 +44,5 @@ void test_barebone_wrapper() {
   Mat<T> H(dim, dim);
   H.setOnes();
 }
+
+int main() {}
