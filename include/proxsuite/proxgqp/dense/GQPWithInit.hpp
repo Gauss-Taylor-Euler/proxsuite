@@ -24,11 +24,10 @@ template <typename T> struct BaseGQPWithInitSupported : BaseGQP<T> {
     Mat<T> kktEqualityOnly(n + m, n + m);
 
     kktEqualityOnly.topLeftCorner(n, n) = this->objectiveAggr.HScaled;
-    kktEqualityOnly.topLeftCorner(n, n).diagonal() +=
-        settings.default_rho;
+    kktEqualityOnly.topLeftCorner(n, n).diagonal() += settings.default_rho;
 
     isize offset = 0;
-    for (auto const& eq : this->equalityConstraints) {
+    for (auto const &eq : this->equalityConstraints) {
       isize mi = eq.AScaled.rows();
       kktEqualityOnly.block(0, n + offset, n, mi) = eq.AScaled.transpose();
       kktEqualityOnly.block(n + offset, 0, mi, n) = eq.AScaled;
@@ -42,7 +41,7 @@ template <typename T> struct BaseGQPWithInitSupported : BaseGQP<T> {
     Vec<T> rhs(n + m);
     rhs.head(n) = -this->objectiveAggr.gScaled;
     offset = 0;
-    for (auto const& eq : this->equalityConstraints) {
+    for (auto const &eq : this->equalityConstraints) {
       rhs.segment(n + offset, eq.bScaled.size()) = eq.bScaled;
       offset += eq.bScaled.size();
     }
