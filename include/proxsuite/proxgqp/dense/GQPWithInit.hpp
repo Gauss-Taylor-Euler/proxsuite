@@ -12,6 +12,9 @@ namespace dense {
 template <typename T> struct BaseGQPWithInitSupported : BaseGQP<T> {
   Settings<T> settings;
 
+  BaseGQPWithInitSupported(isize dim)
+    : BaseGQP<T>(dim) {}
+
   void initSolutionWithZero() { this->solutionState.setZero(); }
 
   void initSolutionWithEqualitySolution() {
@@ -24,7 +27,7 @@ template <typename T> struct BaseGQPWithInitSupported : BaseGQP<T> {
     Mat<T> kktEqualityOnly(n + m, n + m);
 
     kktEqualityOnly.topLeftCorner(n, n) = this->objectiveAggr.HScaled;
-    kktEqualityOnly.topLeftCorner(n, n).diagonal() += settings.default_rho;
+    kktEqualityOnly.topLeftCorner(n, n).diagonal().array() += settings.default_rho;
 
     isize offset = 0;
     for (auto const &eq : this->equalityConstraints) {

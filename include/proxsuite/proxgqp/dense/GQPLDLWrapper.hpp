@@ -18,6 +18,8 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
   Mat<T> kkt;
   Vec<T> rhs;
 
+  GQPLDLWrapper(isize dim) : BaseGQPWithInitSupported<T>(dim) {}
+
   void _setupLDLT(isize kktDim, isize nDiag) {
     using namespace proxsuite::linalg::veg::dynstack;
 
@@ -54,7 +56,7 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
 
     kkt.setZero();
     kkt.topLeftCorner(n, n) = this->objectiveAggr.HScaled;
-    kkt.topLeftCorner(n, n).diagonal() += this->settings.default_rho;
+    kkt.topLeftCorner(n, n).diagonal().array() += this->settings.default_rho;
 
     isize off = n;
     for (auto const &eq : this->equalityConstraints) {
@@ -73,14 +75,16 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
     ldl.factorize(kkt.transpose(), stack);
   }
 
-  void _updateFKBlocks(VecRef<T> z) {
+  virtual void _updateFKBlocks(T muIn, VecRef<T> x, VecRef<T> zPrev) {
     isize n = this->dim;
     isize m_eq = this->n_eq;
 
     isize off = 0;
     for (auto const &ineq : this->inequalityConstraints) {
       isize dimC = ineq.dScaled.size();
-      auto J = ineq.cone.dualJacobian(z.segment(off, dimC));
+      Vec<T> arg =
+          muIn * zPrev.segment(off, dimC) + ineq.CScaled * x + ineq.dScaled;
+      auto J = ineq.cone.dualJacobian(arg);
       auto JC = J * ineq.CScaled;
 
       kkt.block(n + m_eq + off, 0, dimC, n) = JC;
@@ -114,9 +118,12 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
       auto indices_storage =
           stack.make_new_for_overwrite(proxsuite::linalg::veg::Tag<isize>{}, r);
       isize *indices = indices_storage.ptr_mut();
-      for (isize k = 0; k < m_eq; ++k)
+      for (isize k = 0; k < m_eq; ++k) {
         indices[k] = n + k;
-      r (isize k = 0; k < m_in; ++k) indices[m_eq + k] = n + m_eq + k;
+      }
+      for (isize k = 0; k < m_in; ++k) {
+        indices[m_eq + k] = n + m_eq + k;
+      }
 
       ldl.diagonal_update_clobber_indices(indices, r, alpha, stack);
 

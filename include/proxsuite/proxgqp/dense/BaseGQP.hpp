@@ -41,15 +41,15 @@ template <typename T> struct ObjectifParamAggregator {
   Mat<T> HScaled;
   Vec<T> gScaled;
   ObjectifParamAggregator<T>(isize dim)
-      : H(dim, dim), g(dim), HScaled(dim), gScaled(dim) {}
+      : H(dim, dim), g(dim), HScaled(dim, dim), gScaled(dim) {}
 };
 
 using std::vector;
 
 template <typename T> struct GQPPreconditioner {
   virtual void adapt(vector<Eigen::Ref<Mat<T>>> &mats) = 0;
-  virtual void scaleRHS(Vec<T> &gScaled, vector<Vec<T>> &eqBScaled,
-                        vector<Vec<T>> &inDScaled) = 0;
+  virtual void scaleRHS(Vec<T> &gScaled, vector<Eigen::Ref<Vec<T>>> &eqBScaled,
+                        vector<Eigen::Ref<Vec<T>>> &inDScaled) = 0;
   virtual void scaleInPlace(Vec<T> &vec, isize startMatIndex,
                             isize endMatIndex) = 0;
   virtual void unscaleInPlace(Vec<T> &vec, isize startMatIndex,
@@ -157,8 +157,8 @@ template <typename T> struct RuizPreconditioner : GQPPreconditioner<T> {
     Href *= c;
   }
 
-  void scaleRHS(Vec<T> &gScaled, vector<Vec<T>> &eqBScaled,
-                vector<Vec<T>> &inDScaled) override {
+  void scaleRHS(Vec<T> &gScaled, vector<Eigen::Ref<Vec<T>>> &eqBScaled,
+                vector<Eigen::Ref<Vec<T>>> &inDScaled) override {
     gScaled.array() *= delta.head(n_cols).array();
     isize k = 1;
     for (auto &b : eqBScaled) {
@@ -293,8 +293,8 @@ template <typename T> struct BaseGQP {
 
     mats.push_back(objectiveAggr.HScaled);
 
-    vector<Vec<T>> eqBScaled;
-    vector<Vec<T>> inDScaled;
+    vector<Eigen::Ref<Vec<T>>> eqBScaled;
+    vector<Eigen::Ref<Vec<T>>> inDScaled;
 
     for (EqualityConstraintAggregator<T> &equalityAggr : equalityConstraints) {
       equalityAggr.AScaled = equalityAggr.A;
