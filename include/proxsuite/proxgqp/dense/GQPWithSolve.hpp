@@ -2,6 +2,7 @@
 #define PROXSUITE_GQP_WITH_SOLVE
 
 #include "GQPLDLWrapper.hpp"
+#include "GQPResult.hpp"
 #include "fwd.hpp"
 #include <algorithm>
 #include <cmath>
@@ -191,6 +192,9 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
     auto const &s = this->settings;
 
     if (primalInfeas <= s.eps_abs && newtonResidual <= s.eps_abs) {
+      xPrev = x;
+      yPrev = y;
+      zPrev = z;
       return true;
     }
 
@@ -217,10 +221,13 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
     return false;
   }
 
-  void solve() {
+  GQPResult<T> solve() {
     this->_readaptPreconditionementIfNeeded();
     _resizeStateVectors();
 
+    isize outer = 0;
+    isize inner = 0;
+    isize totalInnerIters = 0;
     isize n = this->dim;
     isize m_eq = this->n_eq;
     isize m_in = this->n_in;
@@ -244,9 +251,9 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
     this->_buildKKT();
 
-    for (isize outer = 0; outer < this->settings.max_iter; ++outer) {
+    for (outer = 0; outer < this->settings.max_iter; ++outer) {
 
-      for (isize inner = 0; inner < this->settings.max_iter_in; ++inner) {
+      for (inner = 0; inner < this->settings.max_iter_in; ++inner) {
         if (m_in > 0) {
           this->_updateFKBlocks(muIn, xIterate, zPrevOuter);
         }
@@ -319,6 +326,8 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
         if (m_in > 0) {
           zIterate += step * this->rhs.tail(m_in);
         }
+
+        ++totalInnerIters;
       }
 
       _computeKKTResiduals(rho, muEq, muIn, xIterate, xPrevOuter, yIterate,
@@ -343,6 +352,14 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
     this->solutionState.yScaled = yPrevOuter;
     this->solutionState.zScaled = zPrevOuter;
     this->_unscaleSolution();
+
+    GQPResult<T> result;
+    result.x = this->solutionState.x;
+    result.y = this->solutionState.y;
+    result.z = this->solutionState.z;
+    result.outerIters = outer;
+    result.totalInnerIters = totalInnerIters;
+    return result;
   }
 };
 
