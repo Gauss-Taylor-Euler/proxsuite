@@ -58,6 +58,7 @@ template <typename T> struct GQPPreconditioner {
   virtual void scaleCost(Mat<T> &mat) = 0;
   virtual void unscaleCost(Vec<T> &vec) = 0;
   virtual void unscaleCost(Mat<T> &mat) = 0;
+  virtual void setParams(T eps, isize max_it) {}
 };
 
 template <typename T> struct RuizPreconditioner : GQPPreconditioner<T> {
@@ -66,8 +67,13 @@ template <typename T> struct RuizPreconditioner : GQPPreconditioner<T> {
   isize n_cols = 0;
   vector<isize> rowOffsets;
   vector<isize> rowSizes;
-  T epsilon = T(1e-3);
-  isize max_iter = 10;
+  T epsilon;
+  isize max_iter;
+
+  void setParams(T eps, isize max_it) override {
+    epsilon = eps;
+    max_iter = max_it;
+  }
 
   void adapt(vector<Eigen::Ref<Mat<T>>> &mats) override {
     PROXSUITE_THROW_PRETTY(mats.empty(), std::invalid_argument,
@@ -276,7 +282,7 @@ template <typename T> struct BaseGQP {
     solutionState.zScaled.resize(solutionState.z.size() + d.size());
   }
 
-  void _readaptPreconditionementIfNeeded() {
+  virtual void _readaptPreconditionementIfNeeded() {
     if (!autoNeedToReAdaptPreconditionement) {
       return;
     }

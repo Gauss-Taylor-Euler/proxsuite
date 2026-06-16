@@ -4,7 +4,7 @@
 #include "proxsuite/helpers/common.hpp"
 #include "proxsuite/linalg/veg/internal/typedefs.hpp"
 #include "proxsuite/proxqp/results.hpp"
-#include "proxsuite/proxqp/settings.hpp"
+#include "proxsuite/proxgqp/dense/settings.hpp"
 #include <Eigen/Sparse>
 
 namespace proxsuite {
@@ -40,7 +40,6 @@ using VecBool = Eigen::Matrix<bool, DYN, 1>;
 using DenseBackend = proxsuite::proxqp::DenseBackend;
 using HessianType = proxsuite::proxqp::HessianType;
 template <typename T> using Results = proxsuite::proxqp::Results<T>;
-template <typename T> using Settings = proxsuite::proxqp::Settings<T>;
 
 } // namespace dense
 } // namespace proxgqp

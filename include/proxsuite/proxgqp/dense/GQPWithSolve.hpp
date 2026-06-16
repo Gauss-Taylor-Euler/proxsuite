@@ -12,12 +12,6 @@ namespace proxgqp {
 namespace dense {
 
 template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
-  static constexpr T penaltyReduction = T(0.1);
-  static constexpr T epsNewtonInit = T(1e-3);
-  static constexpr T epsOuterInit = T(1e-2);
-  static constexpr isize maxLineSearchIters = 20;
-  static constexpr T lineSearchReduction = T(0.5);
-  static constexpr T armijoConstant = T(1e-4);
 
   static T _infNorm(VecRef<T> v) {
     return v.template lpNorm<Eigen::Infinity>();
@@ -157,6 +151,9 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
   T _lineSearchArmijo(VecRef<T> newtonStep, T rho, T muEq, T muIn, T M0,
                       T dM_dw, VecRef<T> x, VecRef<T> y, VecRef<T> z,
                       VecRef<T> xPrev, VecRef<T> yPrev, VecRef<T> zPrev) {
+    T lineSearchReduction = this->settings.lineSearchReduction;
+    T armijoConstant = this->settings.armijoConstant;
+    isize maxLineSearchIters = this->settings.maxLineSearchIters;
     T step = T(1);
     isize n = this->dim;
     isize m_eq = this->n_eq;
@@ -187,11 +184,14 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
   }
 
   bool _bclUpdate(T &muEq, T &muIn, T &epsNewton, T &epsOuter, isize outerIter,
-                  T newtonResidual, T primalInfeas, Vec<T> &x, Vec<T> &y,
+                  T kktResidual, T primalInfeas, Vec<T> &x, Vec<T> &y,
                   Vec<T> &z, Vec<T> &xPrev, Vec<T> &yPrev, Vec<T> &zPrev) {
     auto const &s = this->settings;
+    T penaltyReduction = s.penaltyReduction;
+    T epsNewtonInit = s.epsNewtonInit;
+    T epsOuterInit = s.epsOuterInit;
 
-    if (primalInfeas <= s.eps_abs && newtonResidual <= s.eps_abs) {
+    if (primalInfeas <= s.eps_abs && kktResidual <= s.eps_abs) {
       xPrev = x;
       yPrev = y;
       zPrev = z;
@@ -246,6 +246,11 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
     T rho = this->settings.default_rho;
     T muEq = this->settings.default_mu_eq;
     T muIn = this->settings.default_mu_in;
+    T nRes = 0;
+    T nResOrig = 0;
+    T primalInfeas = 0;
+    T epsNewtonInit = this->settings.epsNewtonInit;
+    T epsOuterInit = this->settings.epsOuterInit;
     T epsNewton = epsNewtonInit * muIn;
     T epsOuter = epsOuterInit * std::pow(muIn, this->settings.alpha_bcl);
 
@@ -332,8 +337,8 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
       _computeKKTResiduals(rho, muEq, muIn, xIterate, xPrevOuter, yIterate,
                            yPrevOuter, zIterate, zPrevOuter);
-      T primalInfeas = _primalInfeasibilityNorm(xIterate);
-      T nRes = _infNorm(rStat);
+      primalInfeas = _primalInfeasibilityNorm(xIterate);
+      nRes = _infNorm(rStat);
       if (m_eq > 0) {
         nRes = std::max(nRes, _infNorm(rEq));
       }
@@ -341,9 +346,11 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
         nRes = std::max(nRes, _infNorm(rCone));
       }
 
-      if (_bclUpdate(muEq, muIn, epsNewton, epsOuter, outer, nRes, primalInfeas,
-                     xIterate, yIterate, zIterate, xPrevOuter, yPrevOuter,
-                     zPrevOuter)) {
+      nResOrig = _infNorm(rStat - rho * (xIterate - xPrevOuter));
+
+      if (_bclUpdate(muEq, muIn, epsNewton, epsOuter, outer, nResOrig,
+                     primalInfeas, xIterate, yIterate, zIterate, xPrevOuter,
+                     yPrevOuter, zPrevOuter)) {
         break;
       }
     }
@@ -359,6 +366,19 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
     result.z = this->solutionState.z;
     result.outerIters = outer;
     result.totalInnerIters = totalInnerIters;
+
+    if (outer >= this->settings.max_iter) {
+      result.status = GQPSolverStatus::GQP_MAX_ITER_REACHED;
+    } else if (inner >= this->settings.max_iter_in) {
+      result.status = GQPSolverStatus::GQP_MAX_INNER_ITER_REACHED;
+    } else {
+      result.status = GQPSolverStatus::GQP_SOLVED;
+    }
+    result.pri_res = nResOrig;
+    result.dua_res = primalInfeas;
+    result.mu_eq = muEq;
+    result.mu_in = muIn;
+    result.rho = rho;
     return result;
   }
 };

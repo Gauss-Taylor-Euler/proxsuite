@@ -10,10 +10,16 @@ namespace proxgqp {
 namespace dense {
 
 template <typename T> struct BaseGQPWithInitSupported : BaseGQP<T> {
-  Settings<T> settings;
+  GQPSettings<T> settings;
 
   BaseGQPWithInitSupported(isize dim)
     : BaseGQP<T>(dim) {}
+
+  void _readaptPreconditionementIfNeeded() override {
+    this->conditioner->setParams(settings.preconditioner_accuracy,
+                                 settings.preconditioner_max_iter);
+    BaseGQP<T>::_readaptPreconditionementIfNeeded();
+  }
 
   void initSolutionWithZero() { this->solutionState.setZero(); }
 

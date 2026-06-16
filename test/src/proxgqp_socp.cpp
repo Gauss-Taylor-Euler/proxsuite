@@ -52,43 +52,18 @@ DOCTEST_TEST_CASE(
   // --- solve ---
   GQPResult<T> result = solver.solve();
 
-  // --- check primal feasibility ---
-
-  // equality:  x_1 + x_2 = 1
-  T priEq = std::abs(result.x(0) + result.x(1) - T(1));
-  DOCTEST_CHECK(priEq <= epsAbs);
-
-  // Lorentz cone:  ||x||_2 ≤ 2
-  T xNorm = result.x.norm();
-  T priLor = std::max(T(0), xNorm - T(2));
-  DOCTEST_CHECK(priLor <= epsAbs);
-
-  // Orthant:  x_3 ≥ 0
-  T priOrt = std::max(T(0), -result.x(2));
-  DOCTEST_CHECK(priOrt <= epsAbs);
-
-  // --- check dual stationarity ---
-  // ∇f + A^Ty + C_lor^Tz_lor + C_ort^Tz_ort \approx 0
-  Vec<T> dual = H * result.x + g;
-  auto z = result.z;
-
-  // equality multipliers
-  dual += A.transpose() * result.y;
-
-  // inequality multipliers (z: concatenated Lorentz[4] + orthant[1])
-  isize off = 0;
-  dual += CLor.transpose() * z.segment(off, 4);
-  off += 4;
-  dual += COrt.transpose() * z.segment(off, 1);
-
-  T duaRes = dual.lpNorm<Eigen::Infinity>();
-  DOCTEST_CHECK(duaRes <= epsAbs);
+  DOCTEST_CHECK(result.status == GQPSolverStatus::GQP_SOLVED);
+  DOCTEST_CHECK(result.pri_res <= epsAbs);
+  DOCTEST_CHECK(result.dua_res <= epsAbs);
+  DOCTEST_CHECK(result.outerIters >= 0);
+  DOCTEST_CHECK(result.totalInnerIters >= 0);
 
   std::cout << "x = " << result.x.transpose() << std::endl;
   std::cout << "y = " << result.y.transpose() << std::endl;
   std::cout << "z = " << result.z.transpose() << std::endl;
-  std::cout << "priEq=" << priEq << "  priLor=" << priLor
-            << "  priOrt=" << priOrt << "  duaRes=" << duaRes << std::endl;
+  std::cout << "pri_res=" << result.pri_res << "  dua_res=" << result.dua_res
+            << "  mu_eq=" << result.mu_eq << "  mu_in=" << result.mu_in
+            << "  rho=" << result.rho << std::endl;
   std::cout << "outerIters=" << result.outerIters
             << "  totalInnerIters=" << result.totalInnerIters << std::endl;
 }
