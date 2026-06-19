@@ -1,11 +1,11 @@
 #ifndef PROXSUITE_GQP_WITH_SOLVE
 #define PROXSUITE_GQP_WITH_SOLVE
-
 #include "GQPLDLWrapper.hpp"
 #include "GQPResult.hpp"
 #include "fwd.hpp"
 #include <algorithm>
 #include <cmath>
+#include <stdio.h>
 
 namespace proxsuite {
 namespace proxgqp {
@@ -21,11 +21,12 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
   Vec<T> xPrevOuter, yPrevOuter, zPrevOuter;
   Vec<T> xIterate, yIterate, zIterate;
-  Vec<T> rStat, rEq, rCone;
+  Vec<T> rStat, rStatStar, rEq, rCone, rDMw;
 
   GQPWithSolve(isize dim)
       : GQPLDLWrapper<T>(dim), xPrevOuter(dim), yPrevOuter(0), zPrevOuter(0),
-        xIterate(dim), yIterate(0), zIterate(0), rStat(dim), rEq(0), rCone(0) {}
+        xIterate(dim), yIterate(0), zIterate(0), rStatStar(dim), rStat(dim),
+        rDMw(dim), rEq(0), rCone(0) {}
 
   void _resizeStateVectors() {
     isize m_eq = this->n_eq;
@@ -58,18 +59,36 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
     auto &H = this->objectiveAggr.HScaled;
     auto &g = this->objectiveAggr.gScaled;
 
+    rStatStar.noalias() = H * x;
+    rStatStar += g;
+    rStatStar.array() += rho * (x - xPrev).array();
+
     rStat.noalias() = H * x;
     rStat += g;
     rStat.array() += rho * (x - xPrev).array();
+
+    rDMw.noalias() = H * x;
+    rDMw += g;
+    rDMw.array() += rho * (x - xPrev).array();
 
     if (m_eq > 0) {
       isize off = 0;
       for (auto const &eq : this->equalityConstraints) {
         isize mi = eq.AScaled.rows();
+
+        rStatStar.noalias() += eq.AScaled.transpose() * y.segment(off, mi);
+
         rStat.noalias() += eq.AScaled.transpose() * y.segment(off, mi);
+
+        rDMw.noalias() += eq.AScaled.transpose() * y.segment(off, mi);
+
         rEq.segment(off, mi).noalias() =
             muEq * (y.segment(off, mi) - yPrev.segment(off, mi)) -
             (eq.AScaled * x - eq.bScaled);
+
+        rDMw.noalias() -=
+            2 / m_eq * eq.AScaled.transpose() * rEq.segment(off, mi);
+
         off += mi;
       }
     }
@@ -78,12 +97,22 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
       isize off = 0;
       for (auto const &ineq : this->inequalityConstraints) {
         isize dimC = ineq.dScaled.size();
-        rStat.noalias() += ineq.CScaled.transpose() * z.segment(off, dimC);
-
         Vec<T> arg =
             muIn * zPrev.segment(off, dimC) + ineq.CScaled * x + ineq.dScaled;
         rCone.segment(off, dimC).noalias() =
             muIn * z.segment(off, dimC) - ineq.cone.dualProject(arg);
+
+        auto J = ineq.cone.dualJacobian(arg);
+        auto JC = J * ineq.CScaled;
+
+        rStatStar.noalias() += JC.transpose() * z.segment(off, dimC);
+
+        rStat.noalias() += ineq.CScaled.transpose() * z.segment(off, dimC);
+
+        rDMw.noalias() += JC.transpose() * z.segment(off, dimC);
+
+        rDMw.noalias() -= 2 * JC.transpose() / m_in * rCone.segment(off, dimC);
+
         off += dimC;
       }
     }
@@ -280,7 +309,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
         T M0 = _meritKKT(rho, muEq, muIn, xIterate, xPrevOuter, yPrevOuter,
                          zPrevOuter);
 
-        this->rhs.head(n) = -rStat;
+        this->rhs.head(n) = -rStatStar;
         if (m_eq > 0) {
           this->rhs.segment(n, m_eq) = rEq;
         }
@@ -294,18 +323,19 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
         auto dy = this->rhs.segment(n, m_eq);
         auto dz = this->rhs.tail(m_in);
 
-        T dM_dw = rStat.dot(dx);
+        T dM_dw = rDMw.dot(dx);
 
         if (m_eq > 0) {
           isize off = 0;
           for (auto const &eq : this->equalityConstraints) {
             isize mi = eq.AScaled.rows();
             Vec<T> Adx = eq.AScaled * dx;
-            dM_dw -= rEq.segment(off, mi).dot(Adx) / muEq;
-            dM_dw += rEq.segment(off, mi).dot(dy.segment(off, mi));
+            dM_dw -= 2 * rEq.segment(off, mi).dot(Adx) / muEq;
+            dM_dw += rEq.segment(off, mi).dot(dy);
             off += mi;
           }
         }
+
         if (m_in > 0) {
           isize off = 0;
           for (auto const &ineq : this->inequalityConstraints) {
@@ -314,11 +344,15 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
                          ineq.CScaled * xIterate + ineq.dScaled;
             Mat<T> J = ineq.cone.dualJacobian(arg);
             Vec<T> F_Cdx = J * (ineq.CScaled * dx);
-            dM_dw -= rCone.segment(off, dimC).dot(F_Cdx) / muIn;
-            dM_dw += rCone.segment(off, dimC).dot(dz.segment(off, dimC));
+            dM_dw -= 2 * rCone.segment(off, dimC).dot(F_Cdx) / muIn;
+
+            dM_dw += rCone.segment(off, dimC).dot(dz);
+
             off += dimC;
           }
         }
+
+        // printf("%e\n", dM_dw);
 
         T step = _lineSearchArmijo(this->rhs, rho, muEq, muIn, M0, dM_dw,
                                    xIterate, yIterate, zIterate, xPrevOuter,
