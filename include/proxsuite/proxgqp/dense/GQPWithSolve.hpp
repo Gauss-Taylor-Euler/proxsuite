@@ -87,7 +87,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
             (eq.AScaled * x - eq.bScaled);
 
         rDMw.noalias() -=
-            2 / m_eq * eq.AScaled.transpose() * rEq.segment(off, mi);
+            2 / muEq * eq.AScaled.transpose() * rEq.segment(off, mi);
 
         off += mi;
       }
@@ -111,7 +111,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
         rDMw.noalias() += JC.transpose() * z.segment(off, dimC);
 
-        rDMw.noalias() -= 2 * JC.transpose() / m_in * rCone.segment(off, dimC);
+        rDMw.noalias() -= 2 * JC.transpose() / muIn * rCone.segment(off, dimC);
 
         off += dimC;
       }

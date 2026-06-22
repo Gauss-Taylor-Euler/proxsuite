@@ -99,7 +99,7 @@ def run_one(n, seed):
 
 
 def main():
-    start_n, end_n = 900, 900
+    start_n, end_n = 10, 40
     n_trial =  4
 
     print(f"{'n':>6}  {'clarabel_ms':>12}  {'proxqp_ms':>10}  {'proxgqp_ms':>12}")
