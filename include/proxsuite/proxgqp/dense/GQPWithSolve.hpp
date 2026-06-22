@@ -179,7 +179,9 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
   T _lineSearchArmijo(VecRef<T> newtonStep, T rho, T muEq, T muIn, T M0,
                       T dM_dw, VecRef<T> x, VecRef<T> y, VecRef<T> z,
-                      VecRef<T> xPrev, VecRef<T> yPrev, VecRef<T> zPrev) {
+                      VecRef<T> xPrev, VecRef<T> yPrev, VecRef<T> zPrev,
+                      bool debug = false) {
+
     T lineSearchReduction = this->settings.lineSearchReduction;
     T armijoConstant = this->settings.armijoConstant;
     isize maxLineSearchIters = this->settings.maxLineSearchIters;
@@ -205,9 +207,17 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
                            zTrial, zPrev);
       T M_trial = _meritKKT(rho, muEq, muIn, xTrial, xPrev, yPrev, zPrev);
       if (M_trial <= M0 + armijoConstant * step * dM_dw) {
+        if (debug) {
+          printf("ARMIJO APPROVED STEP: %e\n", step);
+        }
         return step;
       }
+
       step *= lineSearchReduction;
+    }
+
+    if (debug) {
+      printf("ARMIJO UNAPPROVED\n");
     }
     return step;
   }
@@ -250,7 +260,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
     return false;
   }
 
-  GQPResult<T> solve() {
+  GQPResult<T> solve(bool debug = false) {
     this->_readaptPreconditionementIfNeeded();
     _resizeStateVectors();
 
@@ -285,9 +295,20 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
     this->_buildKKT();
 
+    if (debug) {
+      printf("\n\n\n====STARTING SOLVING:====\n");
+    }
     for (outer = 0; outer < this->settings.max_iter; ++outer) {
+      if (debug) {
+        printf("####OUTER LOOP: %d####\n", outer);
+      }
 
+      T rhoIncrease = T(1.0);
       for (inner = 0; inner < this->settings.max_iter_in; ++inner) {
+        if (debug) {
+          printf("**INNER LOOP: %d**\n", inner);
+        }
+
         if (m_in > 0) {
           this->_updateFKBlocks(muIn, xIterate, zPrevOuter);
         }
@@ -352,11 +373,31 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
           }
         }
 
-        // printf("%e\n", dM_dw);
+        if (debug) {
+          printf("dM_dw: %e\n", dM_dw);
+        }
 
-        T step = _lineSearchArmijo(this->rhs, rho, muEq, muIn, M0, dM_dw,
-                                   xIterate, yIterate, zIterate, xPrevOuter,
-                                   yPrevOuter, zPrevOuter);
+        T searchStep = _lineSearchArmijo(
+            this->rhs, rho, muEq, muIn, M0, dM_dw, xIterate, yIterate, zIterate,
+            xPrevOuter, yPrevOuter, zPrevOuter, debug);
+
+        T step = searchStep;
+        // Sometimes the searchStep is too small
+        // Mainly when the problem is reall ill conditioned
+        // In this case we need to increase rho
+        // And to take a sufficient step
+        // Note that the rhho increase will happen outside the loop
+        if (step < this->settings.min_search_step) {
+          step = this->settings.stepInCaseBelowMin;
+          rhoIncrease *= this->settings.rhoIncreaseFactor;
+          if (debug) {
+            printf("!!!SMALL SEARCH STEP DETECTED!!!\n");
+          }
+        }
+
+        if (debug) {
+          printf("SEARCH_STEP: %e | REAL_STEP: %e\n", searchStep, step);
+        }
 
         xIterate += step * this->rhs.head(n);
         if (m_eq > 0) {
@@ -382,11 +423,21 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
       nResOrig = _infNorm(rStat - rho * (xIterate - xPrevOuter));
 
+      rho = std::min(this->settings.maxRho, rho * rhoIncrease);
+
+      if (debug) {
+        printf("\nRHO: %e\n", rho);
+      }
+
       if (_bclUpdate(muEq, muIn, epsNewton, epsOuter, outer, nResOrig,
                      primalInfeas, xIterate, yIterate, zIterate, xPrevOuter,
                      yPrevOuter, zPrevOuter)) {
         break;
       }
+    }
+
+    if (debug) {
+      printf("\n====END====\n\n");
     }
 
     this->solutionState.xScaled = xPrevOuter;

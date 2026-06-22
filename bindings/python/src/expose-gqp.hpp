@@ -34,7 +34,19 @@ template <typename T> void exposeGQP(nanobind::module_ m) {
       .def_rw("armijoConstant", &dense::GQPSettings<T>::armijoConstant,
               "Armijo sufficient-decrease constant.")
       .def_rw("maxLineSearchIters", &dense::GQPSettings<T>::maxLineSearchIters,
-              "maximum number of line-search backtracking steps.");
+               "maximum number of line-search backtracking steps.")
+      .def_rw("min_search_step", &dense::GQPSettings<T>::min_search_step,
+               "minimum allowed line-search step before triggering rho "
+               "increase.")
+      .def_rw(
+          "stepInCaseBelowMin",
+          &dense::GQPSettings<T>::stepInCaseBelowMin,
+          "step to take when the line-search step falls below min_search_step.")
+      .def_rw("rhoIncreaseFactor",
+              &dense::GQPSettings<T>::rhoIncreaseFactor,
+              "factor by which rhoIncrease is multiplied after a small step.")
+      .def_rw("maxRho", &dense::GQPSettings<T>::maxRho,
+              "maximum allowed value for the proximal parameter rho.");
 
   ::nanobind::class_<dense::GQPResult<T>>(m, "Result")
       .def(::nanobind::init<>(), "Default constructor.")
@@ -82,7 +94,7 @@ template <typename T> void exposeGQP(nanobind::module_ m) {
            &dense::GQP<T>::initSolutionWithWarmStart, nanobind::arg("x"),
            nanobind::arg("y"), nanobind::arg("z"),
            "Initialize solution from a warm-start (x,y,z).")
-      .def("solve", &dense::GQP<T>::solve,
+      .def("solve", &dense::GQP<T>::solve, nanobind::arg("debug") = false,
            "Solve the problem and return a Result.");
 }
 

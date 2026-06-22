@@ -19,11 +19,16 @@ template <typename T> struct GQPSettings : proxsuite::proxqp::Settings<T> {
   T lineSearchReduction;
   T armijoConstant;
   isize maxLineSearchIters;
+  T min_search_step;
+  T stepInCaseBelowMin;
+  T rhoIncreaseFactor;
+  T maxRho;
 
   GQPSettings()
       : proxsuite::proxqp::Settings<T>(), penaltyReduction(0.1),
         epsNewtonInit(1e-3), epsOuterInit(1e-2), lineSearchReduction(0.5),
-        armijoConstant(1e-4), maxLineSearchIters(20) {}
+        armijoConstant(1e-4), maxLineSearchIters(5), min_search_step(1e-5),
+        stepInCaseBelowMin(1), rhoIncreaseFactor(10), maxRho(1.0) {}
 };
 
 } // namespace dense
