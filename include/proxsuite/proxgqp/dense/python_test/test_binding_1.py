@@ -27,7 +27,7 @@ lorentz = pgqp.LorentzCone(coneDim)
 #s.t ||(x_1,x_2)||_2 \leq 1
 gqp.addInequalityConstraint(C, d, lorentz)
 
-result = gqp.solve()
+result = gqp.solve(debug=False,strategy=pgqp.Strategy.BaseWithoutProduct)
 print(result.x,result.y,result.z,result.pri_res,result.dua_res)
 
 

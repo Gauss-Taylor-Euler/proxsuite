@@ -50,7 +50,7 @@ DOCTEST_TEST_CASE(
   solver.addInequalityConstraint(COrt, dOrt, coneOrt);
 
   // --- solve ---
-  GQPResult<T> result = solver.solve();
+  GQPResult<T> result = solver.solve(true);
 
   DOCTEST_CHECK(result.status == GQPSolverStatus::GQP_SOLVED);
   DOCTEST_CHECK(result.pri_res <= epsAbs);

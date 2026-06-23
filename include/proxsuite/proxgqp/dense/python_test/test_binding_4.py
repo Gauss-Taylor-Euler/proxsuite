@@ -82,7 +82,7 @@ def run_one(n, seed):
     gqp.addInequalityConstraint(A_in, -b_in_1d, orthant)
 
     t0 = time()
-    result= gqp.solve(debug = False)
+    result= gqp.solve(debug = True,strategy=pgqp.Strategy.Base)
     t_proxgqp = (time() - t0) * 1e3
 
     if verbose:
@@ -99,7 +99,7 @@ def run_one(n, seed):
 
 
 def main():
-    start_n, end_n = 10, 40
+    start_n, end_n = 10, 10
     n_trial =  4
 
     print(f"{'n':>6}  {'clarabel_ms':>12}  {'proxqp_ms':>10}  {'proxgqp_ms':>12}")

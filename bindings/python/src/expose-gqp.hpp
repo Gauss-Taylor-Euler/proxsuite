@@ -19,6 +19,11 @@ template <typename T> void exposeGQP(nanobind::module_ m) {
       .value("NOT_RUN", dense::GQPSolverStatus::GQP_NOT_RUN)
       .export_values();
 
+  ::nanobind::enum_<dense::GQPStrategy>(m, "Strategy")
+      .value("Base", dense::GQPStrategy::Base)
+      .value("BaseWithoutProduct", dense::GQPStrategy::BaseWithoutProduct)
+      .export_values();
+
   ::nanobind::class_<dense::GQPSettings<T>, proxsuite::proxqp::Settings<T>>(
       m, "Settings")
       .def(::nanobind::init<>(), "Default constructor for GQP settings.")
@@ -95,6 +100,7 @@ template <typename T> void exposeGQP(nanobind::module_ m) {
            nanobind::arg("y"), nanobind::arg("z"),
            "Initialize solution from a warm-start (x,y,z).")
       .def("solve", &dense::GQP<T>::solve, nanobind::arg("debug") = false,
+           nanobind::arg("strategy") = dense::GQPStrategy::Base,
            "Solve the problem and return a Result.");
 }
 

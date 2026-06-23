@@ -2,6 +2,7 @@
 #define PROXSUITE_GQP_WITH_SOLVE
 #include "GQPLDLWrapper.hpp"
 #include "GQPResult.hpp"
+#include "Strategy.hpp"
 #include "fwd.hpp"
 #include <algorithm>
 #include <cmath>
@@ -103,9 +104,8 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
         rDMw =
             ineq.CScaled.transpose() * (J.transpose() * z.segment(off, dimC)) -
-            2 / muIn *
-                ineq.CScaled.transpose()(J.transpose() *
-                                         rCone.segment(off, dimC));
+            2 / muIn * ineq.CScaled.transpose() *
+                (J.transpose() * rCone.segment(off, dimC));
 
         off += dimC;
       }
@@ -218,7 +218,9 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
   bool _bclUpdate(T &muEq, T &muIn, T &epsNewton, T &epsOuter, isize outerIter,
                   T kktResidual, T primalInfeas, Vec<T> &x, Vec<T> &y,
-                  Vec<T> &z, Vec<T> &xPrev, Vec<T> &yPrev, Vec<T> &zPrev) {
+                  Vec<T> &z, Vec<T> &xPrev, Vec<T> &yPrev, Vec<T> &zPrev,
+                  T rhoOld, T rhoNew,
+                  GQPStrategy strategy = GQPStrategy::Base) {
     auto const &s = this->settings;
     T penaltyReduction = s.penaltyReduction;
     T epsNewtonInit = s.epsNewtonInit;
@@ -243,8 +245,8 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
       T muEqNew = std::max(muEq * penaltyReduction, s.mu_min_eq);
       T muInNew = std::max(muIn * penaltyReduction, s.mu_min_in);
-      this->_updateBarrierParams(s.default_rho, s.default_rho, muEq, muEqNew,
-                                 muIn, muInNew);
+      this->_updateBarrierParams(rhoOld, rhoNew, muEq, muEqNew, muIn, muInNew,
+                                 strategy);
       muEq = muEqNew;
       muIn = muInNew;
 
@@ -254,7 +256,8 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
     return false;
   }
 
-  GQPResult<T> solve(bool debug = false) {
+  GQPResult<T> solve(bool debug = false,
+                     GQPStrategy strategy = GQPStrategy::Base) {
     this->_readaptPreconditionementIfNeeded();
     _resizeStateVectors();
 
@@ -287,7 +290,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
     T epsNewton = epsNewtonInit * muIn;
     T epsOuter = epsOuterInit * std::pow(muIn, this->settings.alpha_bcl);
 
-    this->_buildKKT();
+    this->_buildKKT(strategy);
 
     if (debug) {
       printf("\n\n\n====STARTING SOLVING:====\n");
@@ -304,7 +307,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
         }
 
         if (m_in > 0) {
-          this->_updateFKBlocks(muIn, xIterate, zPrevOuter);
+          this->_updateKKTInInnerLoop(muIn, xIterate, zPrevOuter, strategy);
         }
 
         _computeKKTResiduals(rho, muEq, muIn, xIterate, xPrevOuter, yIterate,
@@ -332,7 +335,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
           this->rhs.tail(m_in) = rCone;
         }
 
-        this->_solveKKT(this->rhs);
+        this->_solveKKT(this->rhs, strategy);
 
         auto dx = this->rhs.head(n);
         auto dy = this->rhs.segment(n, m_eq);
@@ -417,6 +420,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
       nResOrig = _infNorm(rStat - rho * (xIterate - xPrevOuter));
 
+      T rhoOld = rho;
       rho = std::min(this->settings.maxRho, rho * rhoIncrease);
 
       if (debug) {
@@ -425,7 +429,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
       if (_bclUpdate(muEq, muIn, epsNewton, epsOuter, outer, nResOrig,
                      primalInfeas, xIterate, yIterate, zIterate, xPrevOuter,
-                     yPrevOuter, zPrevOuter)) {
+                     yPrevOuter, zPrevOuter, rhoOld, rho, strategy)) {
         break;
       }
     }

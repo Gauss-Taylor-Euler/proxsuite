@@ -3,8 +3,8 @@
 
 #include "proxsuite/helpers/common.hpp"
 #include "proxsuite/linalg/veg/internal/typedefs.hpp"
-#include "proxsuite/proxqp/results.hpp"
 #include "proxsuite/proxgqp/dense/settings.hpp"
+#include "proxsuite/proxqp/results.hpp"
 #include <Eigen/Sparse>
 
 namespace proxsuite {
