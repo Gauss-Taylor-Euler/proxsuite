@@ -59,35 +59,26 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
     auto &H = this->objectiveAggr.HScaled;
     auto &g = this->objectiveAggr.gScaled;
 
-    rStatStar.noalias() = H * x;
-    rStatStar += g;
-    rStatStar.array() += rho * (x - xPrev).array();
+    rStatStar = H * x + g + rho * (x - xPrev);
+    rStat = H * x + g + rho * (x - xPrev);
 
-    rStat.noalias() = H * x;
-    rStat += g;
-    rStat.array() += rho * (x - xPrev).array();
-
-    rDMw.noalias() = H * x;
-    rDMw += g;
-    rDMw.array() += rho * (x - xPrev).array();
+    rDMw = H * x + g + rho * (x - xPrev);
 
     if (m_eq > 0) {
       isize off = 0;
       for (auto const &eq : this->equalityConstraints) {
         isize mi = eq.AScaled.rows();
 
-        rStatStar.noalias() += eq.AScaled.transpose() * y.segment(off, mi);
+        rStatStar += eq.AScaled.transpose() * y.segment(off, mi);
 
-        rStat.noalias() += eq.AScaled.transpose() * y.segment(off, mi);
-
-        rDMw.noalias() += eq.AScaled.transpose() * y.segment(off, mi);
+        rStat += eq.AScaled.transpose() * y.segment(off, mi);
 
         rEq.segment(off, mi).noalias() =
             muEq * (y.segment(off, mi) - yPrev.segment(off, mi)) -
             (eq.AScaled * x - eq.bScaled);
 
-        rDMw.noalias() -=
-            2 / muEq * eq.AScaled.transpose() * rEq.segment(off, mi);
+        rDMw += eq.AScaled.transpose() * y.segment(off, mi) -
+                2 / muEq * eq.AScaled.transpose() * rEq.segment(off, mi);
 
         off += mi;
       }
@@ -103,15 +94,18 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
             muIn * z.segment(off, dimC) - ineq.cone.dualProject(arg);
 
         auto J = ineq.cone.dualJacobian(arg);
-        auto JC = J * ineq.CScaled;
 
-        rStatStar.noalias() += JC.transpose() * z.segment(off, dimC);
+        // We need to avoid matrix x matrix product as they cost more
+        rStatStar +=
+            ineq.CScaled.transpose() * (J.transpose() * z.segment(off, dimC));
 
-        rStat.noalias() += ineq.CScaled.transpose() * z.segment(off, dimC);
+        rStat += ineq.CScaled.transpose() * z.segment(off, dimC);
 
-        rDMw.noalias() += JC.transpose() * z.segment(off, dimC);
-
-        rDMw.noalias() -= 2 * JC.transpose() / muIn * rCone.segment(off, dimC);
+        rDMw =
+            ineq.CScaled.transpose() * (J.transpose() * z.segment(off, dimC)) -
+            2 / muIn *
+                ineq.CScaled.transpose()(J.transpose() *
+                                         rCone.segment(off, dimC));
 
         off += dimC;
       }
