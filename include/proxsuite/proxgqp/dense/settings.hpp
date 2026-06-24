@@ -13,6 +13,7 @@ using isize = proxsuite::linalg::veg::isize;
 
 template <typename T> struct GQPSettings : proxsuite::proxqp::Settings<T> {
 
+  T iterativeEpsilon;
   T penaltyReduction;
   T epsNewtonInit;
   T epsOuterInit;
@@ -28,7 +29,8 @@ template <typename T> struct GQPSettings : proxsuite::proxqp::Settings<T> {
       : proxsuite::proxqp::Settings<T>(), penaltyReduction(0.1),
         epsNewtonInit(1e-3), epsOuterInit(1e-2), lineSearchReduction(0.5),
         armijoConstant(1e-4), maxLineSearchIters(20), min_search_step(1e-5),
-        stepInCaseBelowMin(1), rhoIncreaseFactor(10), maxRho(1.0) {}
+        stepInCaseBelowMin(1), rhoIncreaseFactor(10), maxRho(1.0),
+        iterativeEpsilon(1e-8) {}
 };
 
 } // namespace dense

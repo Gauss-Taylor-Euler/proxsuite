@@ -295,6 +295,10 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
     if (debug) {
       printf("\n\n\n====STARTING SOLVING:====\n");
     }
+
+    this->strategyState.prevSolution.resize(n + m_eq + m_in + 2 * m_in);
+    this->strategyState.prevSolution.setZero();
+
     for (outer = 0; outer < this->settings.max_iter; ++outer) {
       if (debug) {
         printf("####OUTER LOOP: %d####\n", outer);

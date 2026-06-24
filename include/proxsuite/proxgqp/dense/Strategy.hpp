@@ -5,7 +5,12 @@ namespace proxsuite {
 namespace proxgqp {
 namespace dense {
 
-enum class GQPStrategy { Base, BaseWithoutProduct };
+enum class GQPStrategy {
+  Base,
+  BaseWithoutProduct,
+  SimpleIterativeSolver,
+  SimpleIterativeSolverWithWarmStart
+};
 
 } // namespace dense
 } // namespace proxgqp

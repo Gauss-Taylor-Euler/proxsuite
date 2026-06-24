@@ -1,4 +1,5 @@
 
+#include "proxsuite/proxgqp/dense/Strategy.hpp"
 #include <nanobind/eigen/dense.h>
 #include <nanobind/nanobind.h>
 
@@ -22,6 +23,9 @@ template <typename T> void exposeGQP(nanobind::module_ m) {
   ::nanobind::enum_<dense::GQPStrategy>(m, "Strategy")
       .value("Base", dense::GQPStrategy::Base)
       .value("BaseWithoutProduct", dense::GQPStrategy::BaseWithoutProduct)
+      .value("SimpleIterativeSolver", dense::GQPStrategy::SimpleIterativeSolver)
+      .value("SimpleIterativeSolverWithWarmStart",
+             dense::GQPStrategy::SimpleIterativeSolverWithWarmStart)
       .export_values();
 
   ::nanobind::class_<dense::GQPSettings<T>, proxsuite::proxqp::Settings<T>>(
@@ -39,16 +43,14 @@ template <typename T> void exposeGQP(nanobind::module_ m) {
       .def_rw("armijoConstant", &dense::GQPSettings<T>::armijoConstant,
               "Armijo sufficient-decrease constant.")
       .def_rw("maxLineSearchIters", &dense::GQPSettings<T>::maxLineSearchIters,
-               "maximum number of line-search backtracking steps.")
+              "maximum number of line-search backtracking steps.")
       .def_rw("min_search_step", &dense::GQPSettings<T>::min_search_step,
-               "minimum allowed line-search step before triggering rho "
-               "increase.")
+              "minimum allowed line-search step before triggering rho "
+              "increase.")
       .def_rw(
-          "stepInCaseBelowMin",
-          &dense::GQPSettings<T>::stepInCaseBelowMin,
+          "stepInCaseBelowMin", &dense::GQPSettings<T>::stepInCaseBelowMin,
           "step to take when the line-search step falls below min_search_step.")
-      .def_rw("rhoIncreaseFactor",
-              &dense::GQPSettings<T>::rhoIncreaseFactor,
+      .def_rw("rhoIncreaseFactor", &dense::GQPSettings<T>::rhoIncreaseFactor,
               "factor by which rhoIncrease is multiplied after a small step.")
       .def_rw("maxRho", &dense::GQPSettings<T>::maxRho,
               "maximum allowed value for the proximal parameter rho.");

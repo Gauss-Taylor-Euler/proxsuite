@@ -8,11 +8,19 @@
 #include "proxsuite/linalg/dense/ldlt.hpp"
 #include "proxsuite/linalg/veg/memory/dynamic_stack.hpp"
 #include "proxsuite/linalg/veg/vec.hpp"
+#include <Eigen/IterativeLinearSolvers>
 #include <Eigen/LU>
+#include <iostream>
+#include <ostream>
+#include <unsupported/Eigen/IterativeSolvers>
 
 namespace proxsuite {
 namespace proxgqp {
 namespace dense {
+
+template <typename T> struct StrategyState {
+  Vec<T> prevSolution;
+};
 
 template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
   linalg::dense::Ldlt<T> ldl;
@@ -21,6 +29,8 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
   Vec<T> rhs;
   Vec<T> rhsExpanded;
   Eigen::PartialPivLU<Mat<T>> luSolver;
+  Eigen::MINRES<Mat<T>> minresSolver;
+  StrategyState<T> strategyState;
 
   GQPLDLWrapper(isize dim) : BaseGQPWithInitSupported<T>(dim) {}
 
@@ -83,7 +93,7 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
     _factorize(GQPStrategy::Base);
   }
 
-  void _buildKKTBaseWithoutProduct() {
+  void _commonWithoutProductKKTConstruction() {
     isize n = this->dim;
     isize m_eq = this->n_eq;
     isize m_in = this->n_in;
@@ -115,17 +125,16 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
       isize off_beta = n + m_eq + m_in;
       isize off_alpha = n + m_eq + 2 * m_in;
 
-      kkt.diagonal().segment(off_in, m_in).setConstant(
-          -this->settings.default_mu_in);
+      kkt.diagonal()
+          .segment(off_in, m_in)
+          .setConstant(-this->settings.default_mu_in);
 
       isize off = 0;
       for (auto const &ineq : this->inequalityConstraints) {
         isize dimC = ineq.dScaled.size();
 
-        kkt.block(off_in + off, off_beta + off, dimC, dimC)
-            .setIdentity();
-        kkt.block(off_beta + off, off_in + off, dimC, dimC)
-            .setIdentity();
+        kkt.block(off_in + off, off_beta + off, dimC, dimC).setIdentity();
+        kkt.block(off_beta + off, off_in + off, dimC, dimC).setIdentity();
 
         kkt.block(off_beta + off, off_alpha + off, dimC, dimC)
             .diagonal()
@@ -140,8 +149,16 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
         off += dimC;
       }
     }
+  }
+
+  void _buildKKTBaseWithoutProduct() {
+    _commonWithoutProductKKTConstruction();
 
     luSolver.compute(kkt);
+  }
+
+  void _buildKKTSimpleIterativeSolver() {
+    _commonWithoutProductKKTConstruction();
   }
 
   void _buildKKT(GQPStrategy strategy = GQPStrategy::Base) {
@@ -152,6 +169,12 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
     }
     case GQPStrategy::BaseWithoutProduct: {
       _buildKKTBaseWithoutProduct();
+      break;
+    }
+    case GQPStrategy::SimpleIterativeSolverWithWarmStart:
+    case GQPStrategy::SimpleIterativeSolver: {
+      _buildKKTSimpleIterativeSolver();
+
       break;
     }
     }
@@ -177,7 +200,7 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
     _factorize(GQPStrategy::Base);
   }
 
-  void _updateKKTInInnerLoopBaseWithoutProduct(T muIn, VecRef<T> x,
+  void _commonInnerLoopKKTWithoutProductUpdate(T muIn, VecRef<T> x,
                                                VecRef<T> zPrev) {
     isize n = this->dim;
     isize m_eq = this->n_eq;
@@ -196,8 +219,17 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
 
       off += dimC;
     }
+  }
 
+  void _updateKKTInInnerLoopBaseWithoutProduct(T muIn, VecRef<T> x,
+                                               VecRef<T> zPrev) {
+    _commonInnerLoopKKTWithoutProductUpdate(muIn, x, zPrev);
     luSolver.compute(kkt);
+  }
+
+  void _updateKKTInInnerLoopSimpleIterativeSolver(T muIn, VecRef<T> x,
+                                                  VecRef<T> zPrev) {
+    _commonInnerLoopKKTWithoutProductUpdate(muIn, x, zPrev);
   }
 
   virtual void _updateKKTInInnerLoop(T muIn, VecRef<T> x, VecRef<T> zPrev,
@@ -210,6 +242,11 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
     }
     case GQPStrategy::BaseWithoutProduct: {
       _updateKKTInInnerLoopBaseWithoutProduct(muIn, x, zPrev);
+      break;
+    }
+    case GQPStrategy::SimpleIterativeSolverWithWarmStart:
+    case GQPStrategy::SimpleIterativeSolver: {
+      _updateKKTInInnerLoopSimpleIterativeSolver(muIn, x, zPrev);
       break;
     }
     }
@@ -251,9 +288,9 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
     }
   }
 
-  void _updateBarrierParamsBaseWithoutProduct(T rho_old, T rho_new,
-                                              T r_eq_old, T r_eq_new,
-                                              T r_in_old, T r_in_new) {
+  void _commonUpdateBarrrierParamasWithoutProduct(T rho_old, T rho_new,
+                                                  T r_eq_old, T r_eq_new,
+                                                  T r_in_old, T r_in_new) {
     isize n = this->dim;
     isize m_eq = this->n_eq;
     isize m_in = this->n_in;
@@ -269,8 +306,22 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
     if (r_in_old != r_in_new) {
       kkt.diagonal().segment(n + m_eq, m_in).setConstant(-r_in_new);
     }
+  }
 
+  void _updateBarrierParamsBaseWithoutProduct(T rho_old, T rho_new, T r_eq_old,
+                                              T r_eq_new, T r_in_old,
+                                              T r_in_new) {
+
+    _commonUpdateBarrrierParamasWithoutProduct(rho_old, rho_new, r_eq_old,
+                                               r_eq_new, r_in_old, r_in_new);
     luSolver.compute(kkt);
+  }
+
+  void _updateBarrierParamsSimpleIterativeSolver(T rho_old, T rho_new,
+                                                 T r_eq_old, T r_eq_new,
+                                                 T r_in_old, T r_in_new) {
+    _commonUpdateBarrrierParamasWithoutProduct(rho_old, rho_new, r_eq_old,
+                                               r_eq_new, r_in_old, r_in_new);
   }
 
   void _updateBarrierParams(T rho_old, T rho_new, T r_eq_old, T r_eq_new,
@@ -288,6 +339,12 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
                                              r_eq_new, r_in_old, r_in_new);
       break;
     }
+    case GQPStrategy::SimpleIterativeSolverWithWarmStart:
+    case GQPStrategy::SimpleIterativeSolver: {
+      _updateBarrierParamsSimpleIterativeSolver(rho_old, rho_new, r_eq_old,
+                                                r_eq_new, r_in_old, r_in_new);
+      break;
+    }
     }
   }
 
@@ -296,7 +353,8 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
     ldl.solve_in_place(rhs, stack);
   }
 
-  void _solveKKTBaseWithoutProduct(VecRefMut<T> rhs) {
+  void _solveKKTWithoutProduct(VecRefMut<T> rhs, GQPStrategy strategy) {
+
     isize n = this->dim;
     isize m_eq = this->n_eq;
     isize m_in = this->n_in;
@@ -304,9 +362,76 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
     rhsExpanded.head(n + m_eq + m_in) = rhs;
     rhsExpanded.tail(2 * m_in).setZero();
 
-    rhsExpanded = luSolver.solve(rhsExpanded);
+    // std::cout << rhsExpanded << std::endl;
+
+    switch (strategy) {
+    case GQPStrategy::SimpleIterativeSolverWithWarmStart:
+    case GQPStrategy::SimpleIterativeSolver: {
+      _solveKKTSimpleIterativeSolver(strategy);
+      break;
+    }
+    case GQPStrategy::BaseWithoutProduct: {
+      _solveKKTBaseWithoutProduct();
+      break;
+    }
+    case GQPStrategy::Base: {
+      // SHOULDN'T HAPPEN
+      break;
+    }
+    }
+
+    strategyState.prevSolution = rhsExpanded;
 
     rhs = rhsExpanded.head(n + m_eq + m_in);
+  }
+
+  void _solveKKTSimpleIterativeSolver(GQPStrategy strategy) {
+
+    // std::cout << "KKT:" << kkt << std::endl;
+
+    // printf("MINRES HERE\n");
+
+    minresSolver.setMaxIterations(kkt.rows() * 2);
+    minresSolver.setTolerance(this->settings.iterativeEpsilon);
+
+    minresSolver.compute(kkt);
+
+    Vec<T> rhsCopy = rhsExpanded;
+    switch (strategy) {
+    case GQPStrategy::SimpleIterativeSolverWithWarmStart: {
+      rhsExpanded =
+          minresSolver.solveWithGuess(rhsCopy, strategyState.prevSolution);
+      break;
+    }
+    default: {
+      rhsExpanded = minresSolver.solve(rhsCopy);
+    }
+    }
+
+    // rhsExpanded =
+    //    minresSolver.solve(rhsCopy, strategyState.prevSolution);
+
+    /*
+    std::cout << "=======" << std::endl;
+    std::cout << "PREV:" << strategyState.prevSolution << std::endl;
+    std::cout << "CUR:" << rhsExpanded << std::endl;
+    std::cout << "______" << std::endl;
+    */
+
+    // std::cout << "#iterations:     " << minresSolver.iterations() <<
+    // std::endl; std::cout << "estimated error: " << minresSolver.error() <<
+    // std::endl;
+
+    // std::cout << "AFTER MINRES:" << rhsExpanded << std::endl;
+  }
+
+  void _solveKKTBaseWithoutProduct() {
+    // std::cout << "KKT:" << kkt << std::endl;
+    // printf("LU HERE\n");
+    Vec<T> rhsCopy = rhsExpanded;
+    rhsExpanded = luSolver.solve(rhsCopy);
+
+    // std::cout << "AFTER LU:" << rhsExpanded << std::endl;
   }
 
   void _solveKKT(VecRefMut<T> rhs, GQPStrategy strategy = GQPStrategy::Base) {
@@ -319,8 +444,11 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
       _solveKKTBase(rhs);
       break;
     }
+      // For strategy using the extended kkt without product
+    case GQPStrategy::SimpleIterativeSolver:
+    case GQPStrategy::SimpleIterativeSolverWithWarmStart:
     case GQPStrategy::BaseWithoutProduct: {
-      _solveKKTBaseWithoutProduct(rhs);
+      _solveKKTWithoutProduct(rhs, strategy);
       break;
     }
     }

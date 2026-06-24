@@ -13,7 +13,7 @@ import proxsuite_pywrap.proxqp as proxqp
 import proxsuite_pywrap.proxgqp as pgqp
 import matplotlib.pyplot as plt
 
-verbose = False
+verbose = False 
 
 def generate_random_qp(n, seed=1):
     np.random.seed(seed)
@@ -82,8 +82,13 @@ def run_one(n, seed):
     gqp.addInequalityConstraint(A_in, -b_in_1d, orthant)
 
     t0 = time()
-    result= gqp.solve(debug = True,strategy=pgqp.Strategy.Base)
+    result= gqp.solve(debug = False,strategy= pgqp.Strategy.Base)
     t_proxgqp = (time() - t0) * 1e3
+
+    t0 = time()
+    result= gqp.solve(debug = False,strategy= pgqp.Strategy.SimpleIterativeSolverWithWarmStart)
+    t_proxgqpiterativeWithWarm = (time() - t0) * 1e3
+
 
     if verbose:
         print("x",result.x) 
@@ -95,19 +100,20 @@ def run_one(n, seed):
         print("innerIters", result.totalInnerIters)
 
 
-    return t_clarabel, t_proxqp, t_proxgqp
+    return t_clarabel, t_proxqp, t_proxgqp,t_proxgqpiterativeWithWarm
 
 
 def main():
-    start_n, end_n = 10, 10
-    n_trial =  4
+    start_n, end_n = 10,20
+    n_trial =  1
 
-    print(f"{'n':>6}  {'clarabel_ms':>12}  {'proxqp_ms':>10}  {'proxgqp_ms':>12}")
+    print(f"{'n':>6}  {'clarabel_ms':>12}  {'proxqp_ms':>10}  {'proxgqp_ms':>12} {'proxgqp_iter_ms':>12}")
 
     ns_list = []
     clarabel_list = []
     proxqp_list = []
     proxgqp_list = []
+    proxgqp_iter = []
 
     for n in range(start_n, end_n + 1):
         ts = []
@@ -117,15 +123,17 @@ def main():
 
         # average across trials
         ts = np.array(ts)  # shape (seeds, 3)
-        t_cl, t_qp, t_gqp = ts.mean(axis=0)
+        t_cl, t_qp, t_gqp,t_iter = ts.mean(axis=0)
 
         ns_list.append(n)
         clarabel_list.append(t_cl)
         proxqp_list.append(t_qp)
         proxgqp_list.append(t_gqp)
+        proxgqp_iter.append(t_iter)
 
-        print(f"{n:6d}  {t_cl:12.4f}  {t_qp:10.4f}  {t_gqp:12.4f}", flush=True)
+        print(f"{n:6d}  {t_cl:12.4f}  {t_qp:12.4f}  {t_gqp:12.4f} {t_iter:12.4}", flush=True)
 
+    """
     plt.figure(figsize=(10, 6))
     plt.plot(ns_list, clarabel_list, "o-", label="Clarabel", markersize=4)
     plt.plot(ns_list, proxqp_list, "s-", label="ProxQP", markersize=4)
@@ -140,6 +148,7 @@ def main():
     plt.savefig(plot_path, dpi=150)
     print(f"\nPlot saved to {plot_path}")
     plt.show()
+    """
 
 
 if __name__ == "__main__":
