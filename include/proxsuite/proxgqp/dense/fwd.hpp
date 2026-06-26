@@ -9,7 +9,6 @@
 
 namespace proxsuite {
 namespace proxgqp {
-namespace dense {
 
 static constexpr auto DYN = Eigen::Dynamic;
 enum { layout = Eigen::RowMajor };
@@ -37,11 +36,8 @@ using VecISize = Eigen::Matrix<isize, DYN, 1>;
 
 using VecMapBool = Eigen::Map<Eigen::Matrix<bool, DYN, 1> const>;
 using VecBool = Eigen::Matrix<bool, DYN, 1>;
-using DenseBackend = proxsuite::proxqp::DenseBackend;
-using HessianType = proxsuite::proxqp::HessianType;
 template <typename T> using Results = proxsuite::proxqp::Results<T>;
 
-} // namespace dense
 } // namespace proxgqp
 } // namespace proxsuite
 

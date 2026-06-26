@@ -1,9 +1,11 @@
 
 #include "proxsuite/proxgqp/dense/Strategy.hpp"
+#include "proxsuite/proxgqp/sparse/wrapper.hpp"
 #include <nanobind/eigen/dense.h>
 #include <nanobind/nanobind.h>
 
 #include <proxsuite/proxgqp/dense/dense.hpp>
+#include <proxsuite/proxgqp/sparse/sparse.hpp>
 
 namespace proxsuite {
 namespace proxgqp {
@@ -75,6 +77,11 @@ template <typename T> void exposeGQP(nanobind::module_ m) {
       .def_ro("mu_in", &dense::GQPResult<T>::mu_in,
               "final inequality penalty parameter.")
       .def_ro("rho", &dense::GQPResult<T>::rho, "final proximal parameter.");
+
+  ::nanobind::class_<sparse::SparseGQP<T>>(m, "SparseGQP")
+      .def(::nanobind::init<isize>(), nanobind::arg("dim"),
+           "Constructor taking the primal dimension.")
+      .def("test", &sparse::SparseGQP<T>::test);
 
   ::nanobind::class_<dense::GQP<T>>(m, "GQP")
       .def(::nanobind::init<isize>(), nanobind::arg("dim"),
