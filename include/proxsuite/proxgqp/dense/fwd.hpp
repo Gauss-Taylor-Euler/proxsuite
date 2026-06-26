@@ -7,6 +7,7 @@
 #include "proxsuite/proxqp/results.hpp"
 #include <Eigen/Core>
 #include <Eigen/Sparse>
+#include <chrono>
 
 namespace proxsuite {
 namespace proxgqp {
@@ -46,6 +47,8 @@ template <typename T> struct Cone {
   virtual Vec<T> dualProject(VecRef<T> x) = 0;
 };
 
+template <typename T> using SparseMatRef = Eigen::Ref<SparseMat<T>>;
+
 template <typename T> SparseMat<T> convertToSparseMat(Mat<T> M) {
   typedef Eigen::Triplet<T> Triple;
   std::vector<Triple> tripletList;
@@ -61,6 +64,32 @@ template <typename T> SparseMat<T> convertToSparseMat(Mat<T> M) {
   out.setFromTriplets(tripletList.begin(), tripletList.end());
   return out;
 }
+
+struct Timer {
+  long startTime = 0;
+  long endTime = 0;
+  double accumulatedTime = 0;
+
+  void reset() {
+    this->startTime = 0;
+    this->endTime = 0;
+  }
+  double accumulated() { return accumulatedTime; }
+
+  void start() {
+    startTime =
+        std::chrono::high_resolution_clock::now().time_since_epoch().count();
+  }
+
+  void end() {
+    endTime =
+        std::chrono::high_resolution_clock::now().time_since_epoch().count();
+    accumulatedTime += timeInMilliSeconds();
+  }
+
+  double timeInMilliSeconds() { return (endTime - startTime) / 1e6; }
+};
+
 } // namespace proxgqp
 } // namespace proxsuite
 

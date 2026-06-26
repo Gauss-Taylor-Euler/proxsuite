@@ -1,6 +1,8 @@
 import sys
 import os
 
+from time import time
+
 #So that we can import from the module build
 CUR_DIR = os.path.dirname(os.path.abspath(__file__))
 PYTHON_BUILD = os.path.join(CUR_DIR, "../../../../../build/bindings/python/proxsuite")
@@ -30,7 +32,13 @@ gqp.addInequalityConstraint(C, d, lorentz)
 #gqp.settings.max_iter =  4
 #gqp.settings.max_iter_in = 4
 
+t0 = time()
+
 result = gqp.solve(debug=True,strategy=pgqp.Strategy.Base)
+
+tf =  time()
+
+print((tf-t0)*1000)
 
 #result = gqp.solve(debug=True,strategy=pgqp.Strategy.BaseWithoutProduct)
 print(result.x,result.y,result.z,result.pri_res,result.dua_res)

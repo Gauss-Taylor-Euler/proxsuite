@@ -10,10 +10,10 @@ namespace proxgqp {
 namespace dense {
 
 template <typename T> struct BaseGQPWithInitSupported : BaseGQP<T> {
+  bool exteriorInited = false;
   GQPSettings<T> settings;
 
-  BaseGQPWithInitSupported(isize dim)
-    : BaseGQP<T>(dim) {}
+  BaseGQPWithInitSupported(isize dim) : BaseGQP<T>(dim) {}
 
   void _readaptPreconditionementIfNeeded() override {
     this->conditioner->setParams(settings.preconditioner_accuracy,
@@ -21,9 +21,13 @@ template <typename T> struct BaseGQPWithInitSupported : BaseGQP<T> {
     BaseGQP<T>::_readaptPreconditionementIfNeeded();
   }
 
-  void initSolutionWithZero() { this->solutionState.setZero(); }
+  void _initSolutionWithZero() { this->solutionState.setZero(); }
 
-  void initSolutionWithEqualitySolution() {
+  void initSolutionWithZero() {
+    this->_initSolutionWithZero();
+    exteriorInited = true;
+  }
+  void _initSolutionWithEqualitySolution() {
     initSolutionWithZero();
     this->_readaptPreconditionement();
 
@@ -33,7 +37,8 @@ template <typename T> struct BaseGQPWithInitSupported : BaseGQP<T> {
     Mat<T> kktEqualityOnly(n + m, n + m);
 
     kktEqualityOnly.topLeftCorner(n, n) = this->objectiveAggr.HScaled;
-    kktEqualityOnly.topLeftCorner(n, n).diagonal().array() += settings.default_rho;
+    kktEqualityOnly.topLeftCorner(n, n).diagonal().array() +=
+        settings.default_rho;
 
     isize offset = 0;
     for (auto const &eq : this->equalityConstraints) {
@@ -65,11 +70,20 @@ template <typename T> struct BaseGQPWithInitSupported : BaseGQP<T> {
     this->_unscaleSolution();
   }
 
-  void initSolutionWithPreviousResult() { this->_scaleSolution(); }
+  void initSolutionWithEqualitySolution() {
+    _initSolutionWithEqualitySolution();
+    exteriorInited = true;
+  }
+
+  void initSolutionWithPreviousResult() {
+    this->_scaleSolution();
+    exteriorInited = true;
+  }
 
   void initSolutionWithWarmStart(VecRef<T> x, VecRef<T> y, VecRef<T> z) {
     this->solutionState = SolutionState<T>(x, y, z);
     this->_scaleSolution();
+    exteriorInited = true;
   }
 };
 

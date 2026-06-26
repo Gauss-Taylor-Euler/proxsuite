@@ -23,6 +23,10 @@ template <typename T> struct StrategyState {
 };
 
 template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
+
+  Timer kktConstructionInUpdateTimer;
+  Timer refactorisationTimer;
+
   linalg::dense::Ldlt<T> ldl;
   proxsuite::linalg::veg::Vec<unsigned char> ldl_stack;
   Mat<T> kkt;
@@ -174,7 +178,6 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
     case GQPStrategy::SimpleIterativeSolverWithWarmStart:
     case GQPStrategy::SimpleIterativeSolver: {
       _buildKKTSimpleIterativeSolver();
-
       break;
     }
     }
@@ -231,6 +234,10 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
                                                   VecRef<T> zPrev) {
     _commonInnerLoopKKTWithoutProductUpdate(muIn, x, zPrev);
   }
+
+  void _constructionUpdate(GQPStrategy strategy = GQPStrategy::Base) {}
+
+  void _solveUpdate(GQPStrategy strategy = GQPStrategy::Base) {}
 
   virtual void _updateKKTInInnerLoop(T muIn, VecRef<T> x, VecRef<T> zPrev,
                                      GQPStrategy strategy = GQPStrategy::Base) {

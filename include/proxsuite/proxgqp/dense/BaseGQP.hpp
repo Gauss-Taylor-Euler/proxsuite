@@ -237,6 +237,7 @@ template <typename T> struct BaseGQP {
   RuizPreconditioner<T> defaultConditioner;
   GQPPreconditioner<T> *conditioner = nullptr;
   SolutionState<T> solutionState;
+  bool debug = false;
 
   BaseGQP<T>(isize dim)
       : dim(dim), objectiveAggr(dim), inequalityConstraints(),

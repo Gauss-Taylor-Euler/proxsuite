@@ -6,6 +6,7 @@
 #include "fwd.hpp"
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 #include <stdio.h>
 
 namespace proxsuite {
@@ -54,8 +55,6 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
   void _computeKKTResiduals(T rho, T muEq, T muIn, VecRef<T> x, VecRef<T> xPrev,
                             VecRef<T> y, VecRef<T> yPrev, VecRef<T> z,
                             VecRef<T> zPrev) {
-    isize m_eq = this->n_eq;
-    isize m_in = this->n_in;
 
     auto &H = this->objectiveAggr.HScaled;
     auto &g = this->objectiveAggr.gScaled;
@@ -65,50 +64,45 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
     rDMw = H * x + g + rho * (x - xPrev);
 
-    if (m_eq > 0) {
-      isize off = 0;
-      for (auto const &eq : this->equalityConstraints) {
-        isize mi = eq.AScaled.rows();
+    isize off = 0;
+    for (auto const &eq : this->equalityConstraints) {
+      isize mi = eq.AScaled.rows();
 
-        rStatStar += eq.AScaled.transpose() * y.segment(off, mi);
+      rStatStar += eq.AScaled.transpose() * y.segment(off, mi);
 
-        rStat += eq.AScaled.transpose() * y.segment(off, mi);
+      rStat += eq.AScaled.transpose() * y.segment(off, mi);
 
-        rEq.segment(off, mi).noalias() =
-            muEq * (y.segment(off, mi) - yPrev.segment(off, mi)) -
-            (eq.AScaled * x - eq.bScaled);
+      rEq.segment(off, mi) =
+          muEq * (y.segment(off, mi) - yPrev.segment(off, mi)) -
+          (eq.AScaled * x - eq.bScaled);
 
-        rDMw += eq.AScaled.transpose() * y.segment(off, mi) -
-                2 / muEq * eq.AScaled.transpose() * rEq.segment(off, mi);
+      rDMw += eq.AScaled.transpose() * y.segment(off, mi) -
+              2 / muEq * eq.AScaled.transpose() * rEq.segment(off, mi);
 
-        off += mi;
-      }
+      off += mi;
     }
 
-    if (m_in > 0) {
-      isize off = 0;
-      for (auto const &ineq : this->inequalityConstraints) {
-        isize dimC = ineq.dScaled.size();
-        Vec<T> arg =
-            muIn * zPrev.segment(off, dimC) + ineq.CScaled * x + ineq.dScaled;
-        rCone.segment(off, dimC).noalias() =
-            muIn * z.segment(off, dimC) - ineq.cone.dualProject(arg);
+    off = 0;
+    for (auto const &ineq : this->inequalityConstraints) {
+      isize dimC = ineq.dScaled.size();
+      Vec<T> arg =
+          muIn * zPrev.segment(off, dimC) + ineq.CScaled * x + ineq.dScaled;
+      rCone.segment(off, dimC) =
+          muIn * z.segment(off, dimC) - ineq.cone.dualProject(arg);
 
-        auto J = ineq.cone.dualJacobian(arg);
+      auto J = ineq.cone.dualJacobian(arg);
 
-        // We need to avoid matrix x matrix product as they cost more
-        rStatStar +=
-            ineq.CScaled.transpose() * (J.transpose() * z.segment(off, dimC));
+      // We need to avoid matrix x matrix product as they cost more
+      rStatStar +=
+          ineq.CScaled.transpose() * (J.transpose() * z.segment(off, dimC));
 
-        rStat += ineq.CScaled.transpose() * z.segment(off, dimC);
+      rStat += ineq.CScaled.transpose() * z.segment(off, dimC);
 
-        rDMw =
-            ineq.CScaled.transpose() * (J.transpose() * z.segment(off, dimC)) -
-            2 / muIn * ineq.CScaled.transpose() *
-                (J.transpose() * rCone.segment(off, dimC));
+      rDMw = ineq.CScaled.transpose() * (J.transpose() * z.segment(off, dimC)) -
+             2 / muIn * ineq.CScaled.transpose() *
+                 (J.transpose() * rCone.segment(off, dimC));
 
-        off += dimC;
-      }
+      off += dimC;
     }
   }
   T _meritKKT(T rho, T muEq, T muIn, VecRef<T> x, VecRef<T> xPrev,
@@ -121,34 +115,31 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
     T phi =
         T(0.5) * x.dot(H * x) + g.dot(x) + T(0.5) * rho * _sqNorm(x - xPrev);
 
-    if (m_eq > 0) {
-      isize off = 0;
-      for (auto const &eq : this->equalityConstraints) {
-        isize mi = eq.AScaled.rows();
-        Vec<T> axb = eq.AScaled * x - eq.bScaled;
-        phi += yPrev.segment(off, mi).dot(axb) + _sqNorm(axb) / (T(2) * muEq);
-        off += mi;
-      }
+    isize off = 0;
+    for (auto const &eq : this->equalityConstraints) {
+      isize mi = eq.AScaled.rows();
+      Vec<T> axb = eq.AScaled * x - eq.bScaled;
+      phi += yPrev.segment(off, mi).dot(axb) + _sqNorm(axb) / (T(2) * muEq);
+      off += mi;
     }
 
-    if (m_in > 0) {
-      isize off = 0;
-      for (auto const &ineq : this->inequalityConstraints) {
-        isize dimC = ineq.dScaled.size();
-        Vec<T> arg =
-            muIn * zPrev.segment(off, dimC) + ineq.CScaled * x + ineq.dScaled;
-        Vec<T> proj = ineq.cone.dualProject(arg);
-        phi +=
-            (_sqNorm(proj) - muIn * muIn * _sqNorm(zPrev.segment(off, dimC))) /
-            (T(2) * muIn);
-        off += dimC;
-      }
+    off = 0;
+    for (auto const &ineq : this->inequalityConstraints) {
+      isize dimC = ineq.dScaled.size();
+      Vec<T> arg =
+          muIn * zPrev.segment(off, dimC) + ineq.CScaled * x + ineq.dScaled;
+      Vec<T> proj = ineq.cone.dualProject(arg);
+      phi += (_sqNorm(proj) - muIn * muIn * _sqNorm(zPrev.segment(off, dimC))) /
+             (T(2) * muIn);
+      off += dimC;
     }
 
     T M = phi;
+
     if (m_eq > 0) {
       M += _sqNorm(rEq) / (T(2) * muEq);
     }
+
     if (m_in > 0) {
       M += _sqNorm(rCone) / (T(2) * muIn);
     }
@@ -174,7 +165,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
   T _lineSearchArmijo(VecRef<T> newtonStep, T rho, T muEq, T muIn, T M0,
                       T dM_dw, VecRef<T> x, VecRef<T> y, VecRef<T> z,
                       VecRef<T> xPrev, VecRef<T> yPrev, VecRef<T> zPrev,
-                      bool debug = false) {
+                      bool _debug = false) {
 
     T lineSearchReduction = this->settings.lineSearchReduction;
     T armijoConstant = this->settings.armijoConstant;
@@ -201,7 +192,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
                            zTrial, zPrev);
       T M_trial = _meritKKT(rho, muEq, muIn, xTrial, xPrev, yPrev, zPrev);
       if (M_trial <= M0 + armijoConstant * step * dM_dw) {
-        if (debug) {
+        if (_debug) {
           printf("ARMIJO APPROVED STEP: %e\n", step);
         }
         return step;
@@ -210,7 +201,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
       step *= lineSearchReduction;
     }
 
-    if (debug) {
+    if (_debug) {
       printf("ARMIJO UNAPPROVED\n");
     }
     return step;
@@ -256,9 +247,40 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
     return false;
   }
 
-  GQPResult<T> solve(bool debug = false,
+  GQPResult<T> solve(bool _debug = false,
                      GQPStrategy strategy = GQPStrategy::Base) {
+
+    this->debug = _debug;
+
+    Timer totalTimer;
+    Timer ruizPreconditioningTimer;
+    Timer initSolutionTimer;
+    Timer endOuterTimer;
+    Timer bclTimer;
+    Timer computeResidualTimer;
+    Timer primalInfeasTimer;
+    Timer updateKKTInInnerLoppTimer;
+    Timer computeKKTResidualInInnerLoopTimer;
+    Timer meritCalculationTimer;
+    Timer kktSolverTimer;
+    Timer dMwCalculationTimer;
+    Timer lineSearchTimer;
+
+    this->kktConstructionInUpdateTimer.reset();
+    this->refactorisationTimer.reset();
+
+    totalTimer.start();
+
+    ruizPreconditioningTimer.start();
     this->_readaptPreconditionementIfNeeded();
+    ruizPreconditioningTimer.end();
+
+    if (_debug) {
+      std::cout << "@Ruiz preconditioning init time taken: "
+                << ruizPreconditioningTimer.timeInMilliSeconds() << "ms"
+                << std::endl;
+    }
+
     _resizeStateVectors();
 
     isize outer = 0;
@@ -268,11 +290,23 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
     isize m_eq = this->n_eq;
     isize m_in = this->n_in;
 
-    if (m_eq > 0) {
-      this->initSolutionWithEqualitySolution();
-    } else {
-      this->initSolutionWithZero();
+    initSolutionTimer.start();
+
+    if (m_eq > 0 && !this->exteriorInited) {
+      this->_initSolutionWithEqualitySolution();
+    } else if (!this->exteriorInited) {
+      this->_initSolutionWithZero();
     }
+
+    this->exteriorInited = false;
+
+    initSolutionTimer.end();
+
+    if (_debug) {
+      std::cout << "@Init  solution time taken: "
+                << initSolutionTimer.timeInMilliSeconds() << "ms" << std::endl;
+    }
+
     this->_scaleSolution();
 
     xPrevOuter = xIterate = this->solutionState.xScaled;
@@ -292,7 +326,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
     this->_buildKKT(strategy);
 
-    if (debug) {
+    if (_debug) {
       printf("\n\n\n====STARTING SOLVING:====\n");
     }
 
@@ -300,22 +334,30 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
     this->strategyState.prevSolution.setZero();
 
     for (outer = 0; outer < this->settings.max_iter; ++outer) {
-      if (debug) {
+      if (_debug) {
         printf("####OUTER LOOP: %d####\n", outer);
       }
 
       T rhoIncrease = T(1.0);
       for (inner = 0; inner < this->settings.max_iter_in; ++inner) {
-        if (debug) {
+        if (_debug) {
           printf("**INNER LOOP: %d**\n", inner);
         }
 
         if (m_in > 0) {
+          updateKKTInInnerLoppTimer.start();
           this->_updateKKTInInnerLoop(muIn, xIterate, zPrevOuter, strategy);
+          updateKKTInInnerLoppTimer.end();
+          std::cout << "@Update KKT in inner loop time taken: "
+                    << updateKKTInInnerLoppTimer.timeInMilliSeconds() << "ms"
+                    << std::endl;
         }
 
+        computeKKTResidualInInnerLoopTimer.start();
         _computeKKTResiduals(rho, muEq, muIn, xIterate, xPrevOuter, yIterate,
                              yPrevOuter, zIterate, zPrevOuter);
+        computeKKTResidualInInnerLoopTimer.end();
+
         T nRes = _infNorm(rStat);
         if (m_eq > 0) {
           nRes = std::max(nRes, _infNorm(rEq));
@@ -328,8 +370,16 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
           break;
         }
 
+        meritCalculationTimer.start();
         T M0 = _meritKKT(rho, muEq, muIn, xIterate, xPrevOuter, yPrevOuter,
                          zPrevOuter);
+        meritCalculationTimer.end();
+
+        if (_debug) {
+          std::cout << "@Merit function calculation time taken: "
+                    << meritCalculationTimer.timeInMilliSeconds() << "ms"
+                    << std::endl;
+        }
 
         this->rhs.head(n) = -rStatStar;
         if (m_eq > 0) {
@@ -339,12 +389,20 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
           this->rhs.tail(m_in) = rCone;
         }
 
+        kktSolverTimer.start();
         this->_solveKKT(this->rhs, strategy);
+        kktSolverTimer.end();
+
+        if (_debug) {
+          std::cout << "@KKT solve time taken: "
+                    << kktSolverTimer.timeInMilliSeconds() << "ms" << std::endl;
+        }
 
         auto dx = this->rhs.head(n);
         auto dy = this->rhs.segment(n, m_eq);
         auto dz = this->rhs.tail(m_in);
 
+        dMwCalculationTimer.start();
         T dM_dw = rDMw.dot(dx);
 
         if (m_eq > 0) {
@@ -374,15 +432,31 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
           }
         }
 
-        if (debug) {
+        if (_debug) {
           printf("dM_dw: %e\n", dM_dw);
         }
+        dMwCalculationTimer.end();
+        if (_debug) {
+          std::cout << "dMdwCalculation time taken: "
+                    << dMwCalculationTimer.timeInMilliSeconds() << "ms"
+                    << std::endl;
+        }
 
+        lineSearchTimer.start();
         T searchStep = _lineSearchArmijo(
             this->rhs, rho, muEq, muIn, M0, dM_dw, xIterate, yIterate, zIterate,
-            xPrevOuter, yPrevOuter, zPrevOuter, debug);
+            xPrevOuter, yPrevOuter, zPrevOuter, _debug);
+
+        lineSearchTimer.end();
+
+        if (_debug) {
+          std::cout << "liner search time taken: "
+                    << lineSearchTimer.timeInMilliSeconds() << "ms"
+                    << std::endl;
+        }
 
         T step = searchStep;
+
         // Sometimes the searchStep is too small
         // Mainly when the problem is reall ill conditioned
         // In this case we need to increase rho
@@ -391,12 +465,12 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
         if (step < this->settings.min_search_step) {
           step = this->settings.stepInCaseBelowMin;
           rhoIncrease *= this->settings.rhoIncreaseFactor;
-          if (debug) {
+          if (_debug) {
             printf("!!!SMALL SEARCH STEP DETECTED!!!\n");
           }
         }
 
-        if (debug) {
+        if (_debug) {
           printf("SEARCH_STEP: %e | REAL_STEP: %e\n", searchStep, step);
         }
 
@@ -411,9 +485,28 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
         ++totalInnerIters;
       }
 
+      endOuterTimer.start();
+
+      computeResidualTimer.start();
       _computeKKTResiduals(rho, muEq, muIn, xIterate, xPrevOuter, yIterate,
                            yPrevOuter, zIterate, zPrevOuter);
+      computeResidualTimer.end();
+
+      if (_debug) {
+        std::cout << "@Computer Residual time taken: "
+                  << computeResidualTimer.timeInMilliSeconds() << "ms"
+                  << std::endl;
+      }
+
+      primalInfeasTimer.start();
       primalInfeas = _primalInfeasibilityNorm(xIterate);
+      primalInfeasTimer.end();
+
+      if (_debug) {
+        std::cout << "@Primal infeasibility time taken: "
+                  << primalInfeasTimer.timeInMilliSeconds() << std::endl;
+      }
+
       nRes = _infNorm(rStat);
       if (m_eq > 0) {
         nRes = std::max(nRes, _infNorm(rEq));
@@ -427,18 +520,99 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
       T rhoOld = rho;
       rho = std::min(this->settings.maxRho, rho * rhoIncrease);
 
-      if (debug) {
+      if (_debug) {
         printf("\nRHO: %e\n", rho);
       }
+
+      bclTimer.start();
 
       if (_bclUpdate(muEq, muIn, epsNewton, epsOuter, outer, nResOrig,
                      primalInfeas, xIterate, yIterate, zIterate, xPrevOuter,
                      yPrevOuter, zPrevOuter, rhoOld, rho, strategy)) {
         break;
       }
+      bclTimer.end();
+
+      if (_debug) {
+        std::cout << "@BCL TIME TAKEN: " << bclTimer.timeInMilliSeconds()
+                  << "ms" << std::endl;
+      }
+
+      endOuterTimer.end();
+      if (_debug) {
+        std::cout << "@END OUTER TIME TAKEN: "
+                  << endOuterTimer.timeInMilliSeconds() << "ms" << std::endl;
+      }
     }
 
-    if (debug) {
+    if (_debug) {
+      totalTimer.end();
+
+      std::cout << "@Total Time taken: " << totalTimer.timeInMilliSeconds()
+                << "ms" << std::endl;
+      std::cout << "@Ruiz preconditioning init percent time taken: "
+                << ruizPreconditioningTimer.accumulated() /
+                       totalTimer.timeInMilliSeconds() * 100
+                << "%" << std::endl;
+
+      std::cout << "@Init percent time taken: "
+                << initSolutionTimer.accumulated() /
+                       totalTimer.timeInMilliSeconds() * 100
+                << "%" << std::endl;
+
+      std::cout << "@End Outer percent time taken: "
+                << endOuterTimer.accumulated() /
+                       totalTimer.timeInMilliSeconds() * 100
+                << "%" << std::endl;
+
+      std::cout << "@BCL percent time taken: "
+                << bclTimer.accumulated() / totalTimer.timeInMilliSeconds() *
+                       100
+                << "%" << std::endl;
+
+      std::cout << "@Compute residual percent time taken: "
+                << computeResidualTimer.accumulated() /
+                       totalTimer.timeInMilliSeconds() * 100
+                << std::endl;
+
+      std::cout << "@Infeasability calculation percent time taken: "
+                << primalInfeasTimer.accumulated() /
+                       totalTimer.timeInMilliSeconds() * 100
+                << std::endl;
+
+      std::cout << "@Update KKT in inner loop percent time taken: "
+                << updateKKTInInnerLoppTimer.accumulated() /
+                       totalTimer.timeInMilliSeconds() * 100
+                << std::endl;
+      std::cout << "@Compute KKT Residual in inner loop percent time taken: "
+                << computeKKTResidualInInnerLoopTimer.accumulated() /
+                       totalTimer.timeInMilliSeconds() * 100
+                << std::endl;
+
+      std::cout << "@Merit function calculation percent time taken: "
+                << meritCalculationTimer.accumulated() /
+                       totalTimer.timeInMilliSeconds() * 100
+                << std::endl;
+      std::cout << "@KKT solving percent time taken: "
+                << kktSolverTimer.accumulated() /
+                       totalTimer.timeInMilliSeconds() * 100
+                << std::endl;
+
+      std::cout << "@dMdwCalculation percent time taken: "
+                << dMwCalculationTimer.accumulated() /
+                       totalTimer.timeInMilliSeconds() * 100
+                << std::endl;
+
+      std::cout << "@line search percent time taken: "
+                << lineSearchTimer.accumulated() /
+                       totalTimer.timeInMilliSeconds() * 100
+                << std::endl;
+
+      std::cout << "@TOTAL NUMBER OF OUTER ITERATIONS: " << outer << std::endl;
+
+      std::cout << "@TOTAL NUMBER OF INNER ITERATIONS: " << totalInnerIters
+                << std::endl;
+
       printf("\n====END====\n\n");
     }
 
