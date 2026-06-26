@@ -13,14 +13,13 @@ namespace python {
 using proxsuite::linalg::veg::isize;
 
 template <typename T> void exposeCones(nanobind::module_ m) {
-  ::nanobind::class_<dense::Cone<T>>(m, "Cone");
+  ::nanobind::class_<Cone<T>>(m, "Cone");
 
-  ::nanobind::class_<dense::LorentzCone<T>, dense::Cone<T>>(m, "LorentzCone")
+  ::nanobind::class_<LorentzCone<T>, Cone<T>>(m, "LorentzCone")
       .def(::nanobind::init<isize>(), nanobind::arg("dim"),
            "Second-order (Lorentz) cone.");
 
-  ::nanobind::class_<dense::PositiveOrthantCone<T>, dense::Cone<T>>(
-      m, "PositiveOrthantCone")
+  ::nanobind::class_<PositiveOrthantCone<T>, Cone<T>>(m, "PositiveOrthantCone")
       .def(::nanobind::init<isize>(), nanobind::arg("dim"),
            "Nonnegative orthant cone.");
 }

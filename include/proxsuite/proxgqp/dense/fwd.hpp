@@ -5,6 +5,7 @@
 #include "proxsuite/linalg/veg/internal/typedefs.hpp"
 #include "proxsuite/proxgqp/dense/settings.hpp"
 #include "proxsuite/proxqp/results.hpp"
+#include <Eigen/Core>
 #include <Eigen/Sparse>
 
 namespace proxsuite {
@@ -19,6 +20,7 @@ template <typename T> using VecRef = Eigen::Ref<Vec<T> const>;
 template <typename T> using VecRefMut = Eigen::Ref<Vec<T>>;
 
 template <typename T, int l = layout> using Mat = Eigen::Matrix<T, DYN, DYN, l>;
+
 template <typename T, int l = layout>
 using MatRef = Eigen::Ref<Mat<T, l> const>;
 
@@ -37,7 +39,28 @@ using VecISize = Eigen::Matrix<isize, DYN, 1>;
 using VecMapBool = Eigen::Map<Eigen::Matrix<bool, DYN, 1> const>;
 using VecBool = Eigen::Matrix<bool, DYN, 1>;
 template <typename T> using Results = proxsuite::proxqp::Results<T>;
+template <typename T> struct Cone {
+  virtual Mat<T> dualJacobian(VecRef<T> x) = 0;
+  virtual SparseMat<T> dualSparseJacobian(VecRef<T> x) = 0;
+  virtual Vec<T> applyJacobian(VecRef<T> arg, VecRef<T> x) = 0;
+  virtual Vec<T> dualProject(VecRef<T> x) = 0;
+};
 
+template <typename T> SparseMat<T> convertToSparseMat(Mat<T> M) {
+  typedef Eigen::Triplet<T> Triple;
+  std::vector<Triple> tripletList;
+  for (isize i = 0; i < M.rows(); i++) {
+    for (isize j = 0; j < M.cols(); j++) {
+      if (M(i, j) != 0) {
+        tripletList.push_back(Triple(i, j, M(i, j)));
+      }
+    }
+  }
+  SparseMat<T> out(M.rows(), M.cols());
+
+  out.setFromTriplets(tripletList.begin(), tripletList.end());
+  return out;
+}
 } // namespace proxgqp
 } // namespace proxsuite
 

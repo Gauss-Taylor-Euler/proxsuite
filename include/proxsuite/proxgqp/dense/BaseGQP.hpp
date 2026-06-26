@@ -9,12 +9,8 @@
 
 namespace proxsuite {
 namespace proxgqp {
-namespace dense {
 
-template <typename T> struct Cone {
-  virtual Mat<T> dualJacobian(VecRef<T> x) = 0;
-  virtual Vec<T> dualProject(VecRef<T> x) = 0;
-};
+namespace dense {
 
 template <typename T> struct InequalityConstraintAggregator {
   Mat<T> CScaled;

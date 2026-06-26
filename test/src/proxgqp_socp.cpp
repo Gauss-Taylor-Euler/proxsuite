@@ -7,7 +7,7 @@
 #include <proxsuite/proxgqp/dense/dense.hpp>
 
 using T = double;
-using namespace proxsuite::proxgqp::dense;
+using namespace proxsuite::proxgqp;
 
 DOCTEST_TEST_CASE(
     "proxgqp simple test: Lorentz cone + equality + orthant, 3 variables") {
@@ -15,7 +15,7 @@ DOCTEST_TEST_CASE(
   T epsAbs = T(1e-3);
   isize dim = 3;
 
-  GQP<T> solver(dim);
+  dense::GQP<T> solver(dim);
   solver.settings.eps_abs = epsAbs;
 
   // objective: min -x_1 - 2x_1 + 0.5x_3   (H=0)
@@ -50,9 +50,9 @@ DOCTEST_TEST_CASE(
   solver.addInequalityConstraint(COrt, dOrt, coneOrt);
 
   // --- solve ---
-  GQPResult<T> result = solver.solve(true);
+  dense::GQPResult<T> result = solver.solve(true);
 
-  DOCTEST_CHECK(result.status == GQPSolverStatus::GQP_SOLVED);
+  DOCTEST_CHECK(result.status == dense::GQPSolverStatus::GQP_SOLVED);
   DOCTEST_CHECK(result.pri_res <= epsAbs);
   DOCTEST_CHECK(result.dua_res <= epsAbs);
   DOCTEST_CHECK(result.outerIters >= 0);

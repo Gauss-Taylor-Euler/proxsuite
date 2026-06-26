@@ -5,13 +5,15 @@
 
 namespace proxsuite {
 namespace proxgqp {
-namespace dense {
 
-template <typename T>
-struct PositiveOrthantCone : Cone<T> {
+template <typename T> struct PositiveOrthantCone : Cone<T> {
   isize dimC;
 
   PositiveOrthantCone(isize dim) : dimC(dim) {}
+
+  SparseMat<T> dualSparseJacobian(VecRef<T> z) override {
+    return convertToSparseMat(dualJacobian(z));
+  }
 
   Mat<T> dualJacobian(VecRef<T> z) override {
     Mat<T> J = Mat<T>::Zero(dimC, dimC);
@@ -23,12 +25,13 @@ struct PositiveOrthantCone : Cone<T> {
     return J;
   }
 
-  Vec<T> dualProject(VecRef<T> z) override {
-    return z.cwiseMax(T(0));
+  Vec<T> dualProject(VecRef<T> z) override { return z.cwiseMax(T(0)); }
+
+  Vec<T> applyJacobian(VecRef<T> arg, VecRef<T> x) override {
+    return dualJacobian(arg) * x;
   }
 };
 
-} // namespace dense
 } // namespace proxgqp
 } // namespace proxsuite
 

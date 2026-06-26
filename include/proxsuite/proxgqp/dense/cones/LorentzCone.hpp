@@ -2,16 +2,24 @@
 #define PROXSUITE_GQP_CONE_LORENTZ
 
 #include "proxsuite/proxgqp/dense/BaseGQP.hpp"
+#include "proxsuite/proxgqp/dense/fwd.hpp"
 #include <cmath>
 
 namespace proxsuite {
 namespace proxgqp {
-namespace dense {
 
 template <typename T> struct LorentzCone : Cone<T> {
   isize dimC;
 
   LorentzCone(isize dim) : dimC(dim) {}
+
+  Vec<T> applyJacobian(VecRef<T> arg, VecRef<T> x) override {
+    return dualJacobian(arg) * x;
+  }
+
+  SparseMat<T> dualSparseJacobian(VecRef<T> z) override {
+    return convertToSparseMat(dualJacobian(z));
+  };
 
   Vec<T> dualProject(VecRef<T> z) override {
 
@@ -65,7 +73,6 @@ template <typename T> struct LorentzCone : Cone<T> {
   }
 };
 
-} // namespace dense
 } // namespace proxgqp
 } // namespace proxsuite
 
