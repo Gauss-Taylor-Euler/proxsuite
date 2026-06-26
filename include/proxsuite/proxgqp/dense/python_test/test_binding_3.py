@@ -36,7 +36,7 @@ def generate_random_qp(n, seed=1):
     return P, g, A_eq, b_eq, A_in, b_in, n_eq, n_in
 
 
-n = 600
+n = 1000
 
 H, g, A_eq, b_eq, A_in, b_in, n_eq, n_in = generate_random_qp(n, seed=42)
 gqp = pgqp.GQP(n)
@@ -49,5 +49,8 @@ gqp.addEqualityConstraint(A_eq, b_eq)
 b_in_1d = b_in.reshape(-1)
 gqp.addInequalityConstraint(A_in, -b_in_1d, orthant)
 
+
+start =  time()
 result= gqp.solve(debug = True,strategy= pgqp.Strategy.Base)
+end=  time()
 

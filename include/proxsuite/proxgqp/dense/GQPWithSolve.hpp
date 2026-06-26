@@ -267,7 +267,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
     Timer lineSearchTimer;
 
     this->kktConstructionInUpdateTimer.reset();
-    this->refactorisationTimer.reset();
+    this->solveUpdateTimer.reset();
 
     totalTimer.start();
 
@@ -573,40 +573,57 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
       std::cout << "@Compute residual percent time taken: "
                 << computeResidualTimer.accumulated() /
                        totalTimer.timeInMilliSeconds() * 100
-                << std::endl;
+                << "%" << std::endl;
 
       std::cout << "@Infeasability calculation percent time taken: "
                 << primalInfeasTimer.accumulated() /
                        totalTimer.timeInMilliSeconds() * 100
-                << std::endl;
+                << "%" << std::endl;
 
       std::cout << "@Update KKT in inner loop percent time taken: "
                 << updateKKTInInnerLoppTimer.accumulated() /
                        totalTimer.timeInMilliSeconds() * 100
-                << std::endl;
+                << "*" << std::endl;
       std::cout << "@Compute KKT Residual in inner loop percent time taken: "
                 << computeKKTResidualInInnerLoopTimer.accumulated() /
                        totalTimer.timeInMilliSeconds() * 100
-                << std::endl;
+                << "%" << std::endl;
 
       std::cout << "@Merit function calculation percent time taken: "
                 << meritCalculationTimer.accumulated() /
                        totalTimer.timeInMilliSeconds() * 100
+                << "%"
+
                 << std::endl;
       std::cout << "@KKT solving percent time taken: "
                 << kktSolverTimer.accumulated() /
                        totalTimer.timeInMilliSeconds() * 100
-                << std::endl;
+
+                << "%" << std::endl;
 
       std::cout << "@dMdwCalculation percent time taken: "
                 << dMwCalculationTimer.accumulated() /
                        totalTimer.timeInMilliSeconds() * 100
-                << std::endl;
+
+                << "%" << std::endl;
 
       std::cout << "@line search percent time taken: "
                 << lineSearchTimer.accumulated() /
                        totalTimer.timeInMilliSeconds() * 100
-                << std::endl;
+
+                << "%" << std::endl;
+
+      std::cout << "@KKT construction update percent time taken: "
+                << this->kktConstructionInUpdateTimer.accumulated() /
+                       totalTimer.timeInMilliSeconds() * 100
+
+                << "%" << std::endl;
+
+      std::cout << "@KKT solve update percent time taken: "
+                << this->solveUpdateTimer.accumulated() /
+                       totalTimer.timeInMilliSeconds() * 100
+
+                << "%" << std::endl;
 
       std::cout << "@TOTAL NUMBER OF OUTER ITERATIONS: " << outer << std::endl;
 

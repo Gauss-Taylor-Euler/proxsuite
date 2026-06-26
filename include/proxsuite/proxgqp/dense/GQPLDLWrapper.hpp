@@ -25,7 +25,7 @@ template <typename T> struct StrategyState {
 template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
 
   Timer kktConstructionInUpdateTimer;
-  Timer refactorisationTimer;
+  Timer solveUpdateTimer;
 
   linalg::dense::Ldlt<T> ldl;
   proxsuite::linalg::veg::Vec<unsigned char> ldl_stack;
@@ -55,7 +55,7 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
     }
   }
 
-  auto _factorize(GQPStrategy strategy = GQPStrategy::Base) {
+  auto _factorizeBase() {
     auto stack = _makeStack();
     ldl.factorize(kkt.transpose(), stack);
   }
@@ -94,7 +94,7 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
         .segment(n + m_eq, m_in)
         .setConstant(-this->settings.default_mu_in);
 
-    _factorize(GQPStrategy::Base);
+    _factorizeBase();
   }
 
   void _commonWithoutProductKKTConstruction() {
@@ -102,7 +102,7 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
     isize m_eq = this->n_eq;
     isize m_in = this->n_in;
 
-    isize kktDim = m_in > 0 ? n + m_eq + 3 * m_in : n + m_eq;
+    isize kktDim = n + m_eq + 3 * m_in;
 
     if (kkt.rows() != kktDim) {
       kkt.resize(kktDim, kktDim);
@@ -183,7 +183,7 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
     }
   }
 
-  void _updateKKTInInnerLoopBase(T muIn, VecRef<T> x, VecRef<T> zPrev) {
+  void _kktConstructionInUpdateBase(T muIn, VecRef<T> x, VecRef<T> zPrev) {
     isize n = this->dim;
     isize m_eq = this->n_eq;
 
@@ -199,8 +199,10 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
       kkt.block(0, n + m_eq + off, n, dimC) = JC.transpose();
       off += dimC;
     }
+  }
 
-    _factorize(GQPStrategy::Base);
+  void _solveUpdateKKTBase(T muIn, VecRef<T> x, VecRef<T> zPrev) {
+    _factorizeBase();
   }
 
   void _commonInnerLoopKKTWithoutProductUpdate(T muIn, VecRef<T> x,
@@ -230,33 +232,79 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
     luSolver.compute(kkt);
   }
 
-  void _updateKKTInInnerLoopSimpleIterativeSolver(T muIn, VecRef<T> x,
-                                                  VecRef<T> zPrev) {
-    _commonInnerLoopKKTWithoutProductUpdate(muIn, x, zPrev);
+  void _kktConstructionInUpdateWithoutProduct(T muIn, VecRef<T> x,
+                                              VecRef<T> zPrev) {
+    isize n = this->dim;
+    isize m_eq = this->n_eq;
+    isize off_in = n + m_eq;
+    isize off_beta = n + m_eq + this->n_in;
+
+    isize off = 0;
+    for (auto const &ineq : this->inequalityConstraints) {
+      isize dimC = ineq.dScaled.size();
+      Vec<T> arg =
+          muIn * zPrev.segment(off, dimC) + ineq.CScaled * x + ineq.dScaled;
+      auto J = ineq.cone.dualJacobian(arg);
+
+      kkt.block(off_in + off, off_beta + off, dimC, dimC) = J;
+      kkt.block(off_beta + off, off_in + off, dimC, dimC) = J.transpose();
+
+      off += dimC;
+    }
   }
 
-  void _constructionUpdate(GQPStrategy strategy = GQPStrategy::Base) {}
-
-  void _solveUpdate(GQPStrategy strategy = GQPStrategy::Base) {}
-
-  virtual void _updateKKTInInnerLoop(T muIn, VecRef<T> x, VecRef<T> zPrev,
-                                     GQPStrategy strategy = GQPStrategy::Base) {
-
+  void _constructionUpdate(T muIn, VecRef<T> x, VecRef<T> zPrev,
+                           GQPStrategy strategy = GQPStrategy::Base) {
     switch (strategy) {
     case GQPStrategy::Base: {
-      _updateKKTInInnerLoopBase(muIn, x, zPrev);
+      _kktConstructionInUpdateBase(muIn, x, zPrev);
       break;
     }
     case GQPStrategy::BaseWithoutProduct: {
-      _updateKKTInInnerLoopBaseWithoutProduct(muIn, x, zPrev);
+    case GQPStrategy::SimpleIterativeSolverWithWarmStart:
+    case GQPStrategy::SimpleIterativeSolver: {
+      _kktConstructionInUpdateWithoutProduct(muIn, x, zPrev);
+      break;
+    }
+    }
+    }
+  }
+
+  void _solveUpdateKKTBaseWithoutProduct() { luSolver.compute(kkt); }
+
+  void _solveUpdate(T muIn, VecRef<T> x, VecRef<T> zPrev,
+                    GQPStrategy strategy = GQPStrategy::Base) {
+    switch (strategy) {
+    case GQPStrategy::Base: {
+      _solveUpdateKKTBase(muIn, x, zPrev);
+      break;
+    }
+    case GQPStrategy::BaseWithoutProduct: {
+      _solveUpdateKKTBaseWithoutProduct();
       break;
     }
     case GQPStrategy::SimpleIterativeSolverWithWarmStart:
     case GQPStrategy::SimpleIterativeSolver: {
-      _updateKKTInInnerLoopSimpleIterativeSolver(muIn, x, zPrev);
+      // Iterative strategy don't need any refactorisation
       break;
     }
     }
+  }
+
+  virtual void _updateKKTInInnerLoop(T muIn, VecRef<T> x, VecRef<T> zPrev,
+                                     GQPStrategy strategy = GQPStrategy::Base) {
+    kktConstructionInUpdateTimer.start();
+    _constructionUpdate(muIn, x, zPrev, strategy);
+    kktConstructionInUpdateTimer.end();
+    std::cout << "@KKT construction update time taken: "
+              << kktConstructionInUpdateTimer.timeInMilliSeconds() << "ms"
+              << std::endl;
+
+    solveUpdateTimer.start();
+    _solveUpdate(muIn, x, zPrev, strategy);
+    solveUpdateTimer.end();
+    std::cout << "@KKT solver update time taken: "
+              << solveUpdateTimer.timeInMilliSeconds() << "ms" << std::endl;
   }
 
   void _updateBarrierParamsBase(T rho_old, T rho_new, T r_eq_old, T r_eq_new,
@@ -443,9 +491,9 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
 
   void _solveKKT(VecRefMut<T> rhs, GQPStrategy strategy = GQPStrategy::Base) {
     // We use the same api for all solveKKT i.e we only take the rhs that
-    // correspond to -(-rStatStar,-rEq,-rCone) and it should be overwritten with
-    // dx,dy,dz , even if the system ahs more variable in fact like in the
-    // Without product the extenriio on ly care about dx,dy,dz
+    // correspond to -(-rStatStar,-rEq,-rCone) and it should be overwritten
+    // with dx,dy,dz , even if the system ahs more variable in fact like in
+    // the Without product the extenriio on ly care about dx,dy,dz
     switch (strategy) {
     case GQPStrategy::Base: {
       _solveKKTBase(rhs);
