@@ -22,13 +22,11 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
   static T _sqNorm(VecRef<T> v) { return v.squaredNorm(); }
 
   Vec<T> xPrevOuter, yPrevOuter, zPrevOuter;
-  Vec<T> xIterate, yIterate, zIterate;
   Vec<T> rStat, rStatStar, rEq, rCone, rDMw;
 
   GQPWithSolve(isize dim)
       : GQPLDLWrapper<T>(dim), xPrevOuter(dim), yPrevOuter(0), zPrevOuter(0),
-        xIterate(dim), yIterate(0), zIterate(0), rStatStar(dim), rStat(dim),
-        rDMw(dim), rEq(0), rCone(0) {}
+        rStatStar(dim), rStat(dim), rDMw(dim), rEq(0), rCone(0) {}
 
   void _resizeStateVectors() {
     isize m_eq = this->n_eq;
@@ -42,8 +40,8 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
     resizeIf(yPrevOuter, m_eq);
     resizeIf(zPrevOuter, m_in);
-    resizeIf(yIterate, m_eq);
-    resizeIf(zIterate, m_in);
+    resizeIf(this->yIterate, m_eq);
+    resizeIf(this->zIterate, m_in);
     resizeIf(rEq, m_eq);
     resizeIf(rCone, m_in);
     resizeIf(this->solutionState.y, m_eq);
@@ -294,6 +292,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
     if (m_eq > 0 && !this->exteriorInited) {
       this->_initSolutionWithEqualitySolution();
+      // this->_initSolutionWithZero();
     } else if (!this->exteriorInited) {
       this->_initSolutionWithZero();
     }
@@ -309,9 +308,9 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
     this->_scaleSolution();
 
-    xPrevOuter = xIterate = this->solutionState.xScaled;
-    yPrevOuter = yIterate = this->solutionState.yScaled;
-    zPrevOuter = zIterate = this->solutionState.zScaled;
+    xPrevOuter = this->xIterate = this->solutionState.xScaled;
+    yPrevOuter = this->yIterate = this->solutionState.yScaled;
+    zPrevOuter = this->zIterate = this->solutionState.zScaled;
 
     T rho = this->settings.default_rho;
     T muEq = this->settings.default_mu_eq;
@@ -332,8 +331,10 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
     this->strategyState.prevSolution.resize(n + m_eq + m_in + 2 * m_in);
     this->strategyState.prevSolution.setZero();
+    this->strategyState.lastStep = -1;
 
     for (outer = 0; outer < this->settings.max_iter; ++outer) {
+      this->strategyState.currentOuter = outer;
       if (_debug) {
         printf("####OUTER LOOP: %d####\n", outer);
       }
@@ -346,16 +347,20 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
         if (m_in > 0) {
           updateKKTInInnerLoppTimer.start();
-          this->_updateKKTInInnerLoop(muIn, xIterate, zPrevOuter, strategy);
+          this->_updateKKTInInnerLoop(muIn, this->xIterate, zPrevOuter,
+                                      strategy);
           updateKKTInInnerLoppTimer.end();
-          std::cout << "@Update KKT in inner loop time taken: "
-                    << updateKKTInInnerLoppTimer.timeInMilliSeconds() << "ms"
-                    << std::endl;
+          if (_debug) {
+            std::cout << "@Update KKT in inner loop time taken: "
+                      << updateKKTInInnerLoppTimer.timeInMilliSeconds() << "ms"
+                      << std::endl;
+          }
         }
 
         computeKKTResidualInInnerLoopTimer.start();
-        _computeKKTResiduals(rho, muEq, muIn, xIterate, xPrevOuter, yIterate,
-                             yPrevOuter, zIterate, zPrevOuter);
+        _computeKKTResiduals(rho, muEq, muIn, this->xIterate, xPrevOuter,
+                             this->yIterate, yPrevOuter, this->zIterate,
+                             zPrevOuter);
         computeKKTResidualInInnerLoopTimer.end();
 
         T nRes = _infNorm(rStat);
@@ -371,8 +376,8 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
         }
 
         meritCalculationTimer.start();
-        T M0 = _meritKKT(rho, muEq, muIn, xIterate, xPrevOuter, yPrevOuter,
-                         zPrevOuter);
+        T M0 = _meritKKT(rho, muEq, muIn, this->xIterate, xPrevOuter,
+                         yPrevOuter, zPrevOuter);
         meritCalculationTimer.end();
 
         if (_debug) {
@@ -421,7 +426,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
           for (auto const &ineq : this->inequalityConstraints) {
             isize dimC = ineq.dScaled.size();
             Vec<T> arg = muIn * zPrevOuter.segment(off, dimC) +
-                         ineq.CScaled * xIterate + ineq.dScaled;
+                         ineq.CScaled * this->xIterate + ineq.dScaled;
             Mat<T> J = ineq.cone.dualJacobian(arg);
             Vec<T> F_Cdx = J * (ineq.CScaled * dx);
             dM_dw -= 2 * rCone.segment(off, dimC).dot(F_Cdx) / muIn;
@@ -443,9 +448,10 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
         }
 
         lineSearchTimer.start();
-        T searchStep = _lineSearchArmijo(
-            this->rhs, rho, muEq, muIn, M0, dM_dw, xIterate, yIterate, zIterate,
-            xPrevOuter, yPrevOuter, zPrevOuter, _debug);
+        T searchStep =
+            _lineSearchArmijo(this->rhs, rho, muEq, muIn, M0, dM_dw,
+                              this->xIterate, this->yIterate, this->zIterate,
+                              xPrevOuter, yPrevOuter, zPrevOuter, _debug);
 
         lineSearchTimer.end();
 
@@ -474,12 +480,24 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
           printf("SEARCH_STEP: %e | REAL_STEP: %e\n", searchStep, step);
         }
 
-        xIterate += step * this->rhs.head(n);
+        this->strategyState.lastStep = _sqNorm(step * this->rhs.head(n));
+
+        if (_debug) {
+          std::cout << "NORM  OF STEP: " << _sqNorm(step * this->rhs.head(n))
+                    << std::endl;
+        }
+
+        this->xIterate += step * this->rhs.head(n);
         if (m_eq > 0) {
-          yIterate += step * this->rhs.segment(n, m_eq);
+          this->yIterate += step * this->rhs.segment(n, m_eq);
+          if (_debug) {
+            std::cout << "NORM  OF STEP EQ DUAL: "
+                      << _sqNorm(step * this->rhs.segment(n, m_eq))
+                      << std::endl;
+          }
         }
         if (m_in > 0) {
-          zIterate += step * this->rhs.tail(m_in);
+          this->zIterate += step * this->rhs.tail(m_in);
         }
 
         ++totalInnerIters;
@@ -488,8 +506,9 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
       endOuterTimer.start();
 
       computeResidualTimer.start();
-      _computeKKTResiduals(rho, muEq, muIn, xIterate, xPrevOuter, yIterate,
-                           yPrevOuter, zIterate, zPrevOuter);
+      _computeKKTResiduals(rho, muEq, muIn, this->xIterate, xPrevOuter,
+                           this->yIterate, yPrevOuter, this->zIterate,
+                           zPrevOuter);
       computeResidualTimer.end();
 
       if (_debug) {
@@ -499,7 +518,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
       }
 
       primalInfeasTimer.start();
-      primalInfeas = _primalInfeasibilityNorm(xIterate);
+      primalInfeas = _primalInfeasibilityNorm(this->xIterate);
       primalInfeasTimer.end();
 
       if (_debug) {
@@ -515,7 +534,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
         nRes = std::max(nRes, _infNorm(rCone));
       }
 
-      nResOrig = _infNorm(rStat - rho * (xIterate - xPrevOuter));
+      nResOrig = _infNorm(rStat - rho * (this->xIterate - xPrevOuter));
 
       T rhoOld = rho;
       rho = std::min(this->settings.maxRho, rho * rhoIncrease);
@@ -527,8 +546,9 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
       bclTimer.start();
 
       if (_bclUpdate(muEq, muIn, epsNewton, epsOuter, outer, nResOrig,
-                     primalInfeas, xIterate, yIterate, zIterate, xPrevOuter,
-                     yPrevOuter, zPrevOuter, rhoOld, rho, strategy)) {
+                     primalInfeas, this->xIterate, this->yIterate,
+                     this->zIterate, xPrevOuter, yPrevOuter, zPrevOuter, rhoOld,
+                     rho, strategy)) {
         break;
       }
       bclTimer.end();

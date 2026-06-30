@@ -45,6 +45,13 @@ template <typename T> struct Cone {
   virtual SparseMat<T> dualSparseJacobian(VecRef<T> x) = 0;
   virtual Vec<T> applyJacobian(VecRef<T> arg, VecRef<T> x) = 0;
   virtual Vec<T> dualProject(VecRef<T> x) = 0;
+  virtual Mat<T> precondJacobian(VecRef<T> x) { return dualJacobian(x); }
+  virtual Mat<T> fastMultByDualJacobian(VecRef<T> z, MatRef<T> C) {
+    return dualJacobian(z) * C;
+  }
+  virtual Mat<T> fastMultByPrecondJacobian(VecRef<T> z, MatRef<T> C) {
+    return precondJacobian(z) * C;
+  }
 };
 
 template <typename T> using SparseMatRef = Eigen::Ref<SparseMat<T>>;

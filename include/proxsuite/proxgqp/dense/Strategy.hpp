@@ -9,7 +9,12 @@ enum class GQPStrategy {
   Base,
   BaseWithoutProduct,
   SimpleIterativeSolver,
-  SimpleIterativeSolverWithWarmStart
+  SimpleIterativeSolverWithWarmStart,
+  GMRESSimpleIterativeSolver,
+  DL,
+  GMRESConePrecond,
+  BaseSparseLDLT,
+  BaseProxqpLike
 };
 
 } // namespace dense

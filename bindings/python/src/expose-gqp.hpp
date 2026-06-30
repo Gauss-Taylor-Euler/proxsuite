@@ -1,5 +1,6 @@
 
 #include "proxsuite/proxgqp/dense/Strategy.hpp"
+#include "proxsuite/proxgqp/dense/wrapper.hpp"
 #include "proxsuite/proxgqp/sparse/wrapper.hpp"
 #include <nanobind/eigen/dense.h>
 #include <nanobind/nanobind.h>
@@ -28,6 +29,12 @@ template <typename T> void exposeGQP(nanobind::module_ m) {
       .value("SimpleIterativeSolver", dense::GQPStrategy::SimpleIterativeSolver)
       .value("SimpleIterativeSolverWithWarmStart",
              dense::GQPStrategy::SimpleIterativeSolverWithWarmStart)
+      .value("GMRESSimpleIterativeSolver",
+             dense::GQPStrategy::GMRESSimpleIterativeSolver)
+      .value("DL", dense::GQPStrategy::DL)
+      .value("GMRESConePrecond", dense::GQPStrategy::GMRESConePrecond)
+      .value("BaseSparseLDLT", dense::GQPStrategy::BaseSparseLDLT)
+      .value("BaseProxqpLike", dense::GQPStrategy::BaseProxqpLike)
       .export_values();
 
   ::nanobind::class_<dense::GQPSettings<T>, proxsuite::proxqp::Settings<T>>(

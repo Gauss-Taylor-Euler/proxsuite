@@ -42,6 +42,33 @@ template <typename T> struct LorentzCone : Cone<T> {
     return out;
   }
 
+  Mat<T> fastMultByDualJacobian(VecRef<T> z, MatRef<T> C) override {
+    isize n = dimC - 1;
+    auto a = z.head(n);
+    T b = z(n);
+    T aNorm = a.norm();
+    if (aNorm <= b) {
+      return C;
+    }
+    if (aNorm <= -b) {
+      return Mat<T>::Zero(dimC, C.cols());
+    }
+    T aNormInv = T(1) / aNorm;
+    auto aHat = a * aNormInv;
+    T g = (b + aNorm) * aNormInv;
+    T h = b * aNormInv;
+    auto C_top = C.topRows(n);
+    auto aHatT_C = aHat.transpose() * C_top;
+    Mat<T> JC(dimC, C.cols());
+    JC.topRows(n) =
+        T(0.5) * (g * C_top - h * aHat * aHatT_C) + T(0.5) * aHat * C.row(n);
+    JC.row(n) = T(0.5) * aHatT_C + T(0.5) * C.row(n);
+    return JC;
+  }
+  Mat<T> fastMultByPrecondJacobian(VecRef<T> z, MatRef<T> C) override {
+    return fastMultByDualJacobian(z, C);
+  }
+
   Mat<T> dualJacobian(VecRef<T> z) override {
     isize n = dimC - 1;
     auto a = z.head(n);

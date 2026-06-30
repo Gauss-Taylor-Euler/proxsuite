@@ -44,13 +44,16 @@ gqp.settings.eps_abs = 1e-10
 gqp.setObjective(H, g)
 orthant = pgqp.PositiveOrthantCone(n_in)
 
+gqp.settings.max_iter =  10
+gqp.settings.max_iter_in = 10
+
 gqp.addEqualityConstraint(A_eq, b_eq)
 
 b_in_1d = b_in.reshape(-1)
 gqp.addInequalityConstraint(A_in, -b_in_1d, orthant)
 
+result= gqp.solve(debug = True,strategy= pgqp.Strategy.BaseProxqpLike)
 
-start =  time()
-result= gqp.solve(debug = True,strategy= pgqp.Strategy.Base)
-end=  time()
+#result= gqp.solve(debug = True,strategy= pgqp.Strategy.GMRESSimpleIterativeSolver)
+
 

@@ -30,6 +30,21 @@ template <typename T> struct PositiveOrthantCone : Cone<T> {
   Vec<T> applyJacobian(VecRef<T> arg, VecRef<T> x) override {
     return dualJacobian(arg) * x;
   }
+  Mat<T> precondJacobian(VecRef<T>) override {
+    return Mat<T>::Identity(dimC, dimC);
+  }
+  Mat<T> fastMultByDualJacobian(VecRef<T> z, MatRef<T> C) override {
+    Mat<T> JC = Mat<T>::Zero(dimC, C.cols());
+    for (isize i = 0; i < dimC; ++i) {
+      if (z(i) > T(0)) {
+        JC.row(i) = C.row(i);
+      }
+    }
+    return JC;
+  }
+  Mat<T> fastMultByPrecondJacobian(VecRef<T>, MatRef<T> C) override {
+    return C;
+  }
 };
 
 } // namespace proxgqp
