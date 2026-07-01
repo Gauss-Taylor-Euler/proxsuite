@@ -57,6 +57,20 @@ template <typename T> struct GQPPreconditioner {
   virtual void setParams(T eps, isize max_it) {}
 };
 
+template <typename T> struct IdentityPreconditioner : GQPPreconditioner<T> {
+
+  void adapt(vector<Eigen::Ref<Mat<T>>> &mats) {}
+  void scaleRHS(Vec<T> &gScaled, vector<Eigen::Ref<Vec<T>>> &eqBScaled,
+                vector<Eigen::Ref<Vec<T>>> &inDScaled) {};
+  void scaleInPlace(Vec<T> &vec, isize startMatIndex, isize endMatIndex) {};
+  void unscaleInPlace(Vec<T> &vec, isize startMatIndex, isize endMatIndex) {};
+  void scaleCost(Vec<T> &vec) {};
+  void scaleCost(Mat<T> &mat) {};
+  void unscaleCost(Vec<T> &vec) {};
+  void unscaleCost(Mat<T> &mat) {};
+  void setParams(T eps, isize max_it) {}
+};
+
 template <typename T> struct RuizPreconditioner : GQPPreconditioner<T> {
   Vec<T> delta;
   T c = T(1);

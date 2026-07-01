@@ -4,6 +4,7 @@
 #include "GQPResult.hpp"
 #include "Strategy.hpp"
 #include "fwd.hpp"
+#include "proxsuite/proxgqp/dense/BaseGQP.hpp"
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -52,7 +53,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
   void _computeKKTResiduals(T rho, T muEq, T muIn, VecRef<T> x, VecRef<T> xPrev,
                             VecRef<T> y, VecRef<T> yPrev, VecRef<T> z,
-                            VecRef<T> zPrev) {
+                            VecRef<T> zPrev, bool showLog = false) {
 
     auto &H = this->objectiveAggr.HScaled;
     auto &g = this->objectiveAggr.gScaled;
@@ -85,6 +86,21 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
       isize dimC = ineq.dScaled.size();
       Vec<T> arg =
           muIn * zPrev.segment(off, dimC) + ineq.CScaled * x + ineq.dScaled;
+
+      if (showLog) {
+        std::cout << "arg:\n" << arg << std::endl;
+        std::cout << "P_K(arg):\n" << ineq.cone.dualProject(arg) << std::endl;
+        std::cout << "z:\n" << z << std::endl;
+        std::cout << "muIn*z-P_K(arg)="
+                  << _infNorm(muIn * z.segment(off, dimC) -
+                              ineq.cone.dualProject(arg))
+                  << std::endl;
+        std::cout << "z-1/muIn*P_K(arg)="
+                  << _infNorm(z.segment(off, dimC) -
+                              ineq.cone.dualProject(arg) / muIn)
+                  << std::endl;
+      }
+
       rCone.segment(off, dimC) =
           muIn * z.segment(off, dimC) - ineq.cone.dualProject(arg);
 
@@ -223,12 +239,15 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
     }
 
     if (primalInfeas <= epsOuter || outerIter >= s.safe_guard) {
+      // std::cout << "BCL ACCEPT" << std::endl;
       xPrev = x;
       yPrev = y;
       zPrev = z;
       epsNewton = std::max(epsNewton * muIn, s.eps_abs);
       epsOuter = std::max(epsOuter * std::pow(muIn, s.beta_bcl), s.eps_abs);
     } else {
+
+      // std::cout << "BCL REJECT" << std::endl;
       y = yPrev;
       z = zPrev;
 
@@ -266,6 +285,10 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
     this->kktConstructionInUpdateTimer.reset();
     this->solveUpdateTimer.reset();
+
+    IdentityPreconditioner<T> conditioner;
+
+    this->setConditioner(conditioner);
 
     totalTimer.start();
 
@@ -335,11 +358,19 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
     for (outer = 0; outer < this->settings.max_iter; ++outer) {
       this->strategyState.currentOuter = outer;
+
+      std::cout << "\n\nouter=" << outer << std::endl;
+
+      // std::cout << "muIn=" << muIn << std::endl;
+      // std::cout << "muEq=" << muEq << std::endl;
+      // std::cout << "rho=" << rho << std::endl;
+
       if (_debug) {
         printf("####OUTER LOOP: %d####\n", outer);
       }
 
       T rhoIncrease = T(1.0);
+
       for (inner = 0; inner < this->settings.max_iter_in; ++inner) {
         if (_debug) {
           printf("**INNER LOOP: %d**\n", inner);
@@ -470,7 +501,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
         // Note that the rhho increase will happen outside the loop
         if (step < this->settings.min_search_step) {
           step = this->settings.stepInCaseBelowMin;
-          rhoIncrease *= this->settings.rhoIncreaseFactor;
+          // rhoIncrease *= this->settings.rhoIncreaseFactor;
           if (_debug) {
             printf("!!!SMALL SEARCH STEP DETECTED!!!\n");
           }
@@ -503,12 +534,14 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
         ++totalInnerIters;
       }
 
+      // std::cout << "Finish newton in " << inner << std::endl;
+
       endOuterTimer.start();
 
       computeResidualTimer.start();
       _computeKKTResiduals(rho, muEq, muIn, this->xIterate, xPrevOuter,
                            this->yIterate, yPrevOuter, this->zIterate,
-                           zPrevOuter);
+                           zPrevOuter, false);
       computeResidualTimer.end();
 
       if (_debug) {
@@ -519,6 +552,16 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
 
       primalInfeasTimer.start();
       primalInfeas = _primalInfeasibilityNorm(this->xIterate);
+      // std::cout << "p_k=" << primalInfeas << std::endl;
+      // std::cout << "r_stat=" << _infNorm(rStat) << std ::endl;
+
+      auto &H = this->objectiveAggr.HScaled;
+      auto &g = this->objectiveAggr.gScaled;
+
+      std::cout << "value="
+                << 0.5 * this->xIterate.transpose() * H * this->xIterate +
+                       g.transpose() * this->xIterate
+                << std::endl;
       primalInfeasTimer.end();
 
       if (_debug) {
@@ -533,6 +576,10 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
       if (m_in > 0) {
         nRes = std::max(nRes, _infNorm(rCone));
       }
+
+      std::cout << "rStat=" << _infNorm(rStat) << std::endl;
+      std::cout << "rCone=" << _infNorm(rCone) << std::endl;
+      std::cout << "rEq=" << _infNorm(rEq) << std::endl;
 
       nResOrig = _infNorm(rStat - rho * (this->xIterate - xPrevOuter));
 
