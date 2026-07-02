@@ -278,7 +278,7 @@ template <typename T> struct BaseGQP {
     autoNeedToReAdaptPreconditionement = true;
 
     solutionState.y.resize(solutionState.y.size() + b.size());
-    solutionState.yScaled.resize(solutionState.y.size() + b.size());
+    solutionState.yScaled.resize(solutionState.y.size());
   }
 
   void addInequalityConstraint(MatRef<T> C, VecRef<T> d, Cone<T> &cone) {

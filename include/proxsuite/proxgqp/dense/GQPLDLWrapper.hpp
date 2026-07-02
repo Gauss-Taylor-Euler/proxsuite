@@ -69,13 +69,18 @@ template <typename T> struct StrategyState {
 
 template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
   Vec<T> xIterate, yIterate, zIterate;
+  Vec<T> rStat, rStatStar, rEq, rCone, rDMw;
+
+  T muIn, muEq, rho;
 
   bool alwaysDL = true;
+  bool ignoreCurvature = false;
   Timer kktConstructionInUpdateTimer;
   Timer solveUpdateTimer;
 
   linalg::dense::Ldlt<T> ldl;
   proxsuite::linalg::veg::Vec<unsigned char> ldl_stack;
+  Mat<T> oldCurvature;
   Mat<T> kkt;
   SparseMat<T> sparseKKT;
   Mat<T> staleKKT;
@@ -98,6 +103,31 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
   GQPLDLWrapper(isize dim)
       : BaseGQPWithInitSupported<T>(dim), xIterate(dim), yIterate(0),
         zIterate(0) {}
+
+  Mat<T> curvature() {
+    Mat<T> out = Mat<T>::Zero(this->dim, this->dim);
+    if (!this->ignoreCurvature) {
+      std::cout << "###CURVATURE USED###" << std::endl;
+      isize off = 0;
+      for (auto const &ineq : this->inequalityConstraints) {
+        isize dimC = ineq.dScaled.size();
+
+        Vec<T> arg = muIn * zIterate.segment(off, dimC) +
+                     ineq.CScaled * xIterate + ineq.dScaled;
+
+        Vec<T> u = zIterate.segment(off, dimC) -
+                   (T(2) / muIn) * rCone.segment(off, dimC);
+
+        Mat<T> M = ineq.cone.order2Mat(arg, u);
+
+        out += ineq.CScaled.transpose() * M * ineq.CScaled;
+
+        off += dimC;
+      }
+    }
+    oldCurvature = out;
+    return out;
+  }
 
   void _setupLDLT(isize kktDim, isize nDiag) {
     using namespace proxsuite::linalg::veg::dynstack;
@@ -161,8 +191,8 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
     this->_setupLDLT(kktDim, m_eq + m_in);
 
     kkt.setZero();
-    kkt.topLeftCorner(n, n) = this->objectiveAggr.HScaled;
-    kkt.topLeftCorner(n, n).diagonal().array() += this->settings.default_rho;
+    kkt.topLeftCorner(n, n) = this->objectiveAggr.HScaled + curvature();
+    kkt.topLeftCorner(n, n).diagonal().array() += rho;
 
     isize off = n;
     for (auto const &eq : this->equalityConstraints) {
@@ -172,10 +202,8 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
       off += mi;
     }
 
-    kkt.diagonal().segment(n, m_eq).setConstant(-this->settings.default_mu_eq);
-    kkt.diagonal()
-        .segment(n + m_eq, m_in)
-        .setConstant(-this->settings.default_mu_in);
+    kkt.diagonal().segment(n, m_eq).setConstant(-muEq);
+    kkt.diagonal().segment(n + m_eq, m_in).setConstant(-muIn);
 
     _commonKKTConstructionWithProductUpdate(this->settings.mu_min_in, xIterate,
                                             zIterate);
@@ -202,8 +230,8 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
     }
 
     kkt.setZero();
-    kkt.topLeftCorner(n, n) = this->objectiveAggr.HScaled;
-    kkt.topLeftCorner(n, n).diagonal().array() += this->settings.default_rho;
+    kkt.topLeftCorner(n, n) = this->objectiveAggr.HScaled + curvature();
+    kkt.topLeftCorner(n, n).diagonal().array() += rho;
 
     isize off = n;
     for (auto const &eq : this->equalityConstraints) {
@@ -213,16 +241,14 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
       off += mi;
     }
 
-    kkt.diagonal().segment(n, m_eq).setConstant(-this->settings.default_mu_eq);
+    kkt.diagonal().segment(n, m_eq).setConstant(-muEq);
 
     if (m_in > 0) {
       isize off_in = n + m_eq;
       isize off_beta = n + m_eq + m_in;
       isize off_alpha = n + m_eq + 2 * m_in;
 
-      kkt.diagonal()
-          .segment(off_in, m_in)
-          .setConstant(-this->settings.default_mu_in);
+      kkt.diagonal().segment(off_in, m_in).setConstant(-muIn);
 
       isize off = 0;
       for (auto const &ineq : this->inequalityConstraints) {
@@ -376,6 +402,8 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
 
   void _constructionUpdate(T muIn, VecRef<T> x, VecRef<T> zPrev,
                            GQPStrategy strategy = GQPStrategy::Base) {
+
+    kkt.topLeftCorner(this->dim, this->dim) += -oldCurvature + curvature();
     switch (strategy) {
     case GQPStrategy::BaseSparseLDLT: {
       _kktConstructionBaseSparseLDLT(muIn, x, zPrev);
@@ -869,8 +897,8 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
     this->_setupPrecondLDLT(kktDim);
 
     kkt.setZero();
-    kkt.topLeftCorner(n, n) = this->objectiveAggr.HScaled;
-    kkt.topLeftCorner(n, n).diagonal().array() += this->settings.default_rho;
+    kkt.topLeftCorner(n, n) = this->objectiveAggr.HScaled + curvature();
+    kkt.topLeftCorner(n, n).diagonal().array() += rho;
 
     isize off = n;
     for (auto const &eq : this->equalityConstraints) {
@@ -880,14 +908,11 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
       off += mi;
     }
 
-    kkt.diagonal().segment(n, m_eq).setConstant(-this->settings.default_mu_eq);
-    kkt.diagonal()
-        .segment(n + m_eq, m_in)
-        .setConstant(-this->settings.default_mu_in);
+    kkt.diagonal().segment(n, m_eq).setConstant(-muEq);
+    kkt.diagonal().segment(n + m_eq, m_in).setConstant(-muIn);
 
     if (m_in > 0) {
       isize offJ = 0;
-      T muIn = this->settings.default_mu_in;
       VecRef<T> xInit = this->solutionState.xScaled;
       VecRef<T> zPrevInit = this->solutionState.zScaled;
       for (auto const &ineq : this->inequalityConstraints) {

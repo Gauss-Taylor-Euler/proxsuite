@@ -98,6 +98,52 @@ template <typename T> struct LorentzCone : Cone<T> {
     }
     return J;
   }
+
+  Mat<T> order2Mat(VecRef<T> z, VecRef<T> u) {
+    isize n = dimC - 1;
+    auto a = z.head(n);
+    T b = z(n);
+    T aNorm = a.norm();
+
+    Mat<T> M = Mat<T>::Zero(dimC, dimC);
+
+    // In the flat regions, the Jacobian J(z) is constant (I or 0),
+    // so its derivative with respect to z is 0.
+    if (aNorm <= b || aNorm <= -b) {
+      return M;
+    }
+
+    // Middle region derivative calculations
+    T aNormInv = T(1) / aNorm;
+    auto aHat = a * aNormInv;
+
+    auto u1 = u.head(n);
+    T u2 = u(n);
+
+    // Projections of u1
+    T c = aHat.dot(u1);
+    Vec<T> w = u1 - c * aHat;
+
+    T factor = T(0.5) * aNormInv;
+    T coeff_P = u2 - b * c * aNormInv;
+    T coeff_rank2 = b * aNormInv;
+
+    // Top-Left Block (n x n)
+    M.topLeftCorner(n, n) =
+        factor * (coeff_P * Mat<T>::Identity(n, n) -
+                  coeff_P * (aHat * aHat.transpose()) -
+                  coeff_rank2 * (aHat * w.transpose() + w * aHat.transpose()));
+
+    // Top-Right Block (n x 1)
+    M.block(0, n, n, 1) = factor * w;
+
+    // Bottom-Left Block (1 x n)
+    M.block(n, 0, 1, n) = factor * w.transpose();
+
+    // Bottom-Right Block (1 x 1) remains 0
+
+    return M;
+  }
 };
 
 } // namespace proxgqp

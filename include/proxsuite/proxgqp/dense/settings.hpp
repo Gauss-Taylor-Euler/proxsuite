@@ -33,6 +33,7 @@ template <typename T> struct GQPSettings : proxsuite::proxqp::Settings<T> {
         stepInCaseBelowMin(1), rhoIncreaseFactor(10), maxRho(1.0),
         iterativeEpsilon(1e-8), dlStepLimit(0.01) {
     this->default_rho = 1e-6;
+    // this->mu_min_in = 1e-13;
   }
 };
 

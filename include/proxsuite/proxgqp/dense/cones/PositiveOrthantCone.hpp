@@ -45,6 +45,11 @@ template <typename T> struct PositiveOrthantCone : Cone<T> {
   Mat<T> fastMultByPrecondJacobian(VecRef<T>, MatRef<T> C) override {
     return C;
   }
+
+  Mat<T> order2Mat(VecRef<T> z, VecRef<T> u) {
+    Mat<T> M = Mat<T>::Zero(dimC, dimC);
+    return M;
+  }
 };
 
 } // namespace proxgqp

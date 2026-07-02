@@ -41,6 +41,7 @@ using VecMapBool = Eigen::Map<Eigen::Matrix<bool, DYN, 1> const>;
 using VecBool = Eigen::Matrix<bool, DYN, 1>;
 template <typename T> using Results = proxsuite::proxqp::Results<T>;
 template <typename T> struct Cone {
+  virtual Mat<T> order2Mat(VecRef<T> z, VecRef<T> u) = 0;
   virtual Mat<T> dualJacobian(VecRef<T> x) = 0;
   virtual SparseMat<T> dualSparseJacobian(VecRef<T> x) = 0;
   virtual Vec<T> applyJacobian(VecRef<T> arg, VecRef<T> x) = 0;
