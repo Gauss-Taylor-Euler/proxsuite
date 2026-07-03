@@ -240,15 +240,20 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
     }
 
     if (primalInfeas <= epsOuter || outerIter >= s.safe_guard) {
-      std::cout << "BCL ACCEPT" << std::endl;
+      if (this->debug) {
+        std::cout << "BCL ACCEPT" << std::endl;
+      }
       xPrev = x;
       yPrev = y;
       zPrev = z;
       epsNewton = std::max(epsNewton * muIn, s.eps_abs);
       epsOuter = std::max(epsOuter * std::pow(muIn, s.beta_bcl), s.eps_abs);
     } else {
+      if (this->debug) {
 
-      std::cout << "BCL REJECT" << std::endl;
+        std::cout << "BCL REJECT" << std::endl;
+      }
+
       y = yPrev;
       z = zPrev;
 
@@ -263,6 +268,16 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
       epsOuter = epsOuterInit * std::pow(muIn, s.alpha_bcl);
     }
     return false;
+  }
+
+  void projZ() {
+    isize off = 0;
+    for (auto const &ineq : this->inequalityConstraints) {
+      isize dimC = ineq.dScaled.size();
+      this->zIterate.segment(off, dimC) =
+          ineq.cone.dualProject(this->zIterate.segment(off, dimC)) / this->muIn;
+      off += dimC;
+    }
   }
 
   GQPResult<T> solve(bool _debug = false,
@@ -373,7 +388,9 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
       this->muIn = muIn;
       this->rho = rho;
 
-      std::cout << "\n\nouter=" << outer << std::endl;
+      if (this->debug) {
+        std::cout << "\n\nouter=" << outer << std::endl;
+      }
 
       // std::cout << "muIn=" << muIn << std::endl;
       // std::cout << "muEq=" << muEq << std::endl;
@@ -548,6 +565,8 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
           this->zIterate += step * this->rhs.tail(m_in);
         }
 
+        // this->projZ();
+
         ++totalInnerIters;
       }
 
@@ -558,7 +577,7 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
       computeResidualTimer.start();
       _computeKKTResiduals(rho, muEq, muIn, this->xIterate, xPrevOuter,
                            this->yIterate, yPrevOuter, this->zIterate,
-                           zPrevOuter, true);
+                           zPrevOuter, false);
       computeResidualTimer.end();
 
       if (_debug) {
@@ -575,13 +594,13 @@ template <typename T> struct GQPWithSolve : GQPLDLWrapper<T> {
       auto &H = this->objectiveAggr.HScaled;
       auto &g = this->objectiveAggr.gScaled;
 
-      std::cout << "value="
-                << 0.5 * this->xIterate.transpose() * H * this->xIterate +
-                       g.transpose() * this->xIterate
-                << std::endl;
       primalInfeasTimer.end();
 
       if (_debug) {
+        std::cout << "value="
+                  << 0.5 * this->xIterate.transpose() * H * this->xIterate +
+                         g.transpose() * this->xIterate
+                  << std::endl;
         std::cout << "@Primal infeasibility time taken: "
                   << primalInfeasTimer.timeInMilliSeconds() << std::endl;
       }

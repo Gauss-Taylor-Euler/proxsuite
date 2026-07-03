@@ -82,11 +82,11 @@ def run_one(n, seed):
     gqp.addInequalityConstraint(A_in, -b_in_1d, orthant)
 
     t0 = time()
-    #result= gqp.solve(debug = False,strategy= pgqp.Strategy.BaseProxqpLike)
+    result= gqp.solve(debug = False,strategy= pgqp.Strategy.Base)
     t_proxgqp = (time() - t0) * 1e3
 
     t0 = time()
-    result= gqp.solve(debug = False,strategy= pgqp.Strategy.BaseProxqpLike)
+    result= gqp.solve(debug = False,strategy= pgqp.Strategy.GMRESConePrecond)
     t_proxgqpiterativeWithWarm = (time() - t0) * 1e3
 
 
@@ -104,7 +104,7 @@ def run_one(n, seed):
 
 
 def main():
-    start_n, end_n = 900,950
+    start_n, end_n = 200,250
     n_trial =  1
 
     print(f"{'n':>6}  {'clarabel_ms':>12}  {'proxqp_ms':>10}  {'proxgqp_ms':>12} {'proxgqp_iter_ms':>12}")
