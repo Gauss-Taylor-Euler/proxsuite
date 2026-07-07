@@ -69,6 +69,8 @@ template <typename T> struct StrategyState {
 
 template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
   Vec<T> xIterate, yIterate, zIterate;
+  Vec<T> xPrevOuter, yPrevOuter, zPrevOuter;
+
   Vec<T> rStat, rStatStar, rEq, rCone, rDMw;
 
   T muIn, muEq, rho;
@@ -102,18 +104,21 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
 
   GQPLDLWrapper(isize dim)
       : BaseGQPWithInitSupported<T>(dim), xIterate(dim), yIterate(0),
-        zIterate(0) {}
+        zIterate(0), xPrevOuter(dim), yPrevOuter(0), zPrevOuter(0) {}
 
   Mat<T> curvature() {
     Mat<T> out = Mat<T>::Zero(this->dim, this->dim);
     if (!this->ignoreCurvature) {
-      std::cout << "###CURVATURE USED###" << std::endl;
+      std::cout << "\n###CURVATURE USED###" << std::endl;
       isize off = 0;
       for (auto const &ineq : this->inequalityConstraints) {
         isize dimC = ineq.dScaled.size();
 
-        Vec<T> arg = muIn * zIterate.segment(off, dimC) +
+        Vec<T> arg = muIn * this->zPrevOuter.segment(off, dimC) +
                      ineq.CScaled * xIterate + ineq.dScaled;
+
+        // std::cout << "zIterate=" << zIterate << std::endl;
+        // std::cout << "rCone=" << rCone << std::endl;
 
         Vec<T> u = zIterate.segment(off, dimC) -
                    (T(2) / muIn) * rCone.segment(off, dimC);
@@ -403,7 +408,9 @@ template <typename T> struct GQPLDLWrapper : BaseGQPWithInitSupported<T> {
   void _constructionUpdate(T muIn, VecRef<T> x, VecRef<T> zPrev,
                            GQPStrategy strategy = GQPStrategy::Base) {
 
-    kkt.topLeftCorner(this->dim, this->dim) += -oldCurvature + curvature();
+    // If we don't do in too time we get a bug due to aliasing
+    kkt.topLeftCorner(this->dim, this->dim) += -oldCurvature;
+    kkt.topLeftCorner(this->dim, this->dim) += curvature();
     switch (strategy) {
     case GQPStrategy::BaseSparseLDLT: {
       _kktConstructionBaseSparseLDLT(muIn, x, zPrev);

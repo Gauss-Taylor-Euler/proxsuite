@@ -4,6 +4,7 @@
 #include "proxsuite/proxgqp/dense/BaseGQP.hpp"
 #include "proxsuite/proxgqp/dense/fwd.hpp"
 #include <cmath>
+#include <iostream>
 
 namespace proxsuite {
 namespace proxgqp {
@@ -142,6 +143,11 @@ template <typename T> struct LorentzCone : Cone<T> {
 
     // Bottom-Right Block (1 x 1) remains 0
 
+    /*
+    std::cout << "arg=" << z << std::endl;
+    std::cout << "u=" << u << std::endl;
+    std::cout << "curvature=" << M << std::endl;
+    */
     return M;
   }
 };

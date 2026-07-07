@@ -117,7 +117,8 @@ template <typename T> void exposeGQP(nanobind::module_ m) {
            "Initialize solution from a warm-start (x,y,z).")
       .def("solve", &dense::GQP<T>::solve, nanobind::arg("debug") = false,
            nanobind::arg("strategy") = dense::GQPStrategy::Base,
-           nanobind::arg("ignoreCurvature") = true,
+           nanobind::arg("ignoreCurvature") = false,
+           nanobind::arg("useArmijo") = true,
            "Solve the problem and return a Result.");
 }
 
