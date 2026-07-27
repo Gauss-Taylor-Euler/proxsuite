@@ -8,6 +8,7 @@ if(DEFINED PROJECT_NAME AND NOT PROJECT_WORKSPACE)
   set(PROXSUITE_AS_SUBPROJECT ON)
 endif()
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(PROJECT_NAME proxsuite)
 set(PROJECT_DESCRIPTION "The Advanced Proximal Optimization Toolbox")
 set(PROJECT_URL "http://github.com/Simple-Robotics/proxsuite")
